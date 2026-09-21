@@ -4,6 +4,8 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-21
+
 ### Fixed
 
 - Group custom handler predicates so ordinary `orWhere` clauses preserve
