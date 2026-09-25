@@ -1,12 +1,12 @@
 # NVL Filterable — API and usage
 
-[← NVL Laravel Suite](../../../README.md)
+[← NVL Laravel Suite](https://github.com/nvl-laravel-suite)
 
 ## Quick reference
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/laravel-suite:^2.0` |
+| Installed through | `composer require nvl/filterable:^2.0` |
 | Module identifier | `nvl/filterable` |
 | PHP namespace | `Nvl\Filterable` |
 | Service provider | `Nvl\Filterable\Providers\FilterableServiceProvider` |
@@ -16,12 +16,12 @@
 
 `nvl/filterable` translates explicit typed filter sets into allowlisted Eloquent predicates and sorting on Laravel 13 and PHP 8.4+. It is not a facets engine, full-text search engine, authorization layer, or arbitrary query language.
 
-The package depends only on `nvl/data` inside the NVL family. It has no migrations, routes, configuration, or host-model assumptions.
+The package depends only on `nvl/core` inside the NVL family. It has no migrations, routes, configuration, or host-model assumptions.
 
 ## Requirements and installation
 
 ```bash
-composer require nvl/laravel-suite:^2.0
+composer require nvl/filterable:^2.0
 php artisan vendor:publish --tag=filterable-skills
 ```
 
