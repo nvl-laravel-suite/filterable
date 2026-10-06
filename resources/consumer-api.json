@@ -1,0 +1,199 @@
+{
+    "schema_version": 1,
+    "package": "nvl/filterable",
+    "psr4": {
+        "Nvl\\Filterable\\": "src"
+    },
+    "symbols": {
+        "Nvl\\Filterable\\Data\\FilterCriterion": {
+            "kind": "class",
+            "file": "src/Data/FilterCriterion.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "alias",
+                "operator",
+                "value"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Data\\FilterSet": {
+            "kind": "class",
+            "file": "src/Data/FilterSet.php",
+            "methods": [
+                "__construct",
+                "none"
+            ],
+            "properties": [
+                "filters",
+                "sorts"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Data\\SortCriterion": {
+            "kind": "class",
+            "file": "src/Data/SortCriterion.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "alias",
+                "direction"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Definitions\\FilterDefinition": {
+            "kind": "class",
+            "file": "src/Definitions/FilterDefinition.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "alias",
+                "column",
+                "enumValues",
+                "handler",
+                "nullable",
+                "operators",
+                "type"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Definitions\\FilterSchema": {
+            "kind": "class",
+            "file": "src/Definitions/FilterSchema.php",
+            "methods": [
+                "__construct",
+                "filter",
+                "sort"
+            ],
+            "properties": [
+                "defaultSorts",
+                "filters",
+                "maximumFilters",
+                "maximumSorts",
+                "maximumStringLength",
+                "maximumValuesPerFilter",
+                "sorts",
+                "tieBreakerSort"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Definitions\\SortDefinition": {
+            "kind": "class",
+            "file": "src/Definitions/SortDefinition.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "alias",
+                "column"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Enums\\FilterOperator": {
+            "kind": "enum",
+            "file": "src/Enums/FilterOperator.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "After",
+                "Before",
+                "Between",
+                "Contains",
+                "Equals",
+                "Gt",
+                "Gte",
+                "In",
+                "IsNotNull",
+                "IsNull",
+                "Lt",
+                "Lte",
+                "NotContains",
+                "NotEquals",
+                "NotIn"
+            ]
+        },
+        "Nvl\\Filterable\\Enums\\FilterValueType": {
+            "kind": "enum",
+            "file": "src/Enums/FilterValueType.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Boolean",
+                "Date",
+                "DateTime",
+                "Decimal",
+                "Enum",
+                "Integer",
+                "String"
+            ]
+        },
+        "Nvl\\Filterable\\Enums\\SortDirection": {
+            "kind": "enum",
+            "file": "src/Enums/SortDirection.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Asc",
+                "Desc"
+            ]
+        },
+        "Nvl\\Filterable\\Http\\QueryFilterSetFactory": {
+            "kind": "class",
+            "file": "src/Http/QueryFilterSetFactory.php",
+            "methods": [
+                "__construct",
+                "fromHttpQuery",
+                "fromQuery"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Services\\EloquentFilterApplier": {
+            "kind": "class",
+            "file": "src/Services/EloquentFilterApplier.php",
+            "methods": [
+                "__construct",
+                "apply"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Traits\\Filterable": {
+            "kind": "trait",
+            "file": "src/Traits/Filterable.php",
+            "methods": [
+                "filterSchema",
+                "scopeApplyFilterSet"
+            ],
+            "properties": [],
+            "constants": []
+        }
+    },
+    "models": {},
+    "capability_relations": {},
+    "tables": {}
+}
