@@ -9,12 +9,15 @@ use Nvl\Data\Services\TypeScriptSourceRegistry;
 use Nvl\Filterable\Http\QueryFilterSetFactory;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
+use Nvl\Support\Traits\RegistersNamespacedResources;
 
 /**
  * Registers generated TypeScript discovery and publishable agent guidance.
  */
 final class FilterableServiceProvider extends ServiceProvider
 {
+    use RegistersNamespacedResources;
+
     /**
      * Register stateless filter services.
      */

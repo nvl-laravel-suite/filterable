@@ -11,7 +11,7 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/filterable:^2.0` |
+| Installed through | `composer require nvl/filterable:^5.0` |
 | Module identifier | `nvl/filterable` |
 | PHP namespace | `Nvl\Filterable` |
 | Service provider | `Nvl\Filterable\Providers\FilterableServiceProvider` |
@@ -26,8 +26,8 @@ The package depends only on `nvl/core` inside the NVL family. It has no migratio
 ## Requirements and installation
 
 ```bash
-composer require nvl/filterable:^2.0
-php artisan vendor:publish --tag=filterable-skills
+composer require nvl/filterable:^5.0
+php artisan vendor:publish --tag=nvl-filterable-skills
 ```
 
 ## Declare a schema

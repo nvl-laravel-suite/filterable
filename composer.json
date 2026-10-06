@@ -3,13 +3,18 @@
     "description": "Validated, reusable Eloquent filtering and sorting for Laravel",
     "type": "library",
     "license": "MIT",
-    "keywords": ["laravel", "eloquent", "filtering", "sorting"],
+    "keywords": [
+        "laravel",
+        "eloquent",
+        "filtering",
+        "sorting"
+    ],
     "require": {
         "php": "^8.3",
         "ext-filter": "*",
         "laravel/framework": "^13.0",
         "nesbot/carbon": "^2.72 || ^3.0",
-        "nvl/core": "^2.0",
+        "nvl/core": "^5.0",
         "spatie/laravel-data": "^4.23",
         "spatie/typescript-transformer": "^3.3"
     },
@@ -43,7 +48,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "2.x-dev"
+            "dev-main": "5.x-dev"
         },
         "laravel": {
             "providers": [
@@ -67,7 +72,9 @@
             "/.phpunit.result.cache",
             "/phpstan.neon.dist",
             "/phpunit.xml.dist",
-            "/tests"
+            "/tests",
+            "/.DS_Store",
+            "/**/.DS_Store"
         ]
     },
     "minimum-stability": "stable",

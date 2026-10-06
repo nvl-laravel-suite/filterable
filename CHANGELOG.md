@@ -4,6 +4,12 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare lockstep major 5 with required and development NVL peer floors of `^5.0`. This candidate has not been tagged or published.
+- Keep filtering behavior unchanged; adopt canonical configuration and the lockstep major.
+- Review [UPGRADING.md](UPGRADING.md) before adopting the new names and infrastructure boundaries.
+
 ## [2.2.1] - 2026-09-26
 
 ### Documentation
