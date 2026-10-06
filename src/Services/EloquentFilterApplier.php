@@ -6,6 +6,7 @@ namespace Nvl\Filterable\Services;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
 use Nvl\Filterable\Data\FilterCriterion;
 use Nvl\Filterable\Data\FilterSet;
 use Nvl\Filterable\Data\SortCriterion;
@@ -20,7 +21,7 @@ use Nvl\Filterable\Exceptions\FilterableException;
  *
  * @api
  */
-final readonly class EloquentFilterApplier
+final readonly class EloquentFilterApplier implements EloquentFilterApplierContract
 {
     /**
      * Create an Eloquent filter applier.

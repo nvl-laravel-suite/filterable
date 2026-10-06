@@ -5,6 +5,15 @@
         "Nvl\\Filterable\\": "src"
     },
     "symbols": {
+        "Nvl\\Filterable\\Contracts\\EloquentFilterApplierContract": {
+            "kind": "interface",
+            "file": "src/Contracts/EloquentFilterApplierContract.php",
+            "methods": [
+                "apply"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Filterable\\Data\\FilterCriterion": {
             "kind": "class",
             "file": "src/Data/FilterCriterion.php",
@@ -144,6 +153,72 @@
                 "String"
             ]
         },
+        "Nvl\\Filterable\\Enums\\FilterableResponseCode": {
+            "kind": "enum",
+            "file": "src/Enums/FilterableResponseCode.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "DisallowedFilterOperator",
+                "DuplicateDefaultSort",
+                "DuplicateEnumValue",
+                "DuplicateFilterAlias",
+                "DuplicateFilterOperator",
+                "DuplicateSort",
+                "DuplicateSortAlias",
+                "EmptyStringFilterValue",
+                "FilterComplexityExceeded",
+                "FilterStringTooLong",
+                "FilterValueComplexityExceeded",
+                "IncompatibleFilterOperator",
+                "InvalidBetweenArity",
+                "InvalidBooleanFilterValue",
+                "InvalidDateFilterValue",
+                "InvalidDateTimeFilterValue",
+                "InvalidDecimalFilterValue",
+                "InvalidDefaultSort",
+                "InvalidEnumFilterValue",
+                "InvalidEnumValues",
+                "InvalidFilter",
+                "InvalidFilterAlias",
+                "InvalidFilterColumn",
+                "InvalidFilterOperators",
+                "InvalidFilterSchema",
+                "InvalidFilterShape",
+                "InvalidFilterValue",
+                "InvalidFilterValueShape",
+                "InvalidIntegerFilterValue",
+                "InvalidMaximumFilterValues",
+                "InvalidMaximumFilters",
+                "InvalidMaximumSorts",
+                "InvalidMaximumStringLength",
+                "InvalidSortAlias",
+                "InvalidSortColumn",
+                "InvalidSortDirection",
+                "InvalidSortShape",
+                "InvalidStringFilterValue",
+                "MissingEnumValues",
+                "MissingFilterValue",
+                "NonNullableFilterOperator",
+                "OperationFailed",
+                "SortComplexityExceeded",
+                "UnexpectedEnumValues",
+                "UnexpectedFilterValue",
+                "UnknownDefaultSort",
+                "UnknownFilterAlias",
+                "UnknownSortAlias",
+                "UnknownTieBreakerSort",
+                "UnsafeWrappedFilterColumn",
+                "UnsupportedFilterOperator"
+            ]
+        },
         "Nvl\\Filterable\\Enums\\SortDirection": {
             "kind": "enum",
             "file": "src/Enums/SortDirection.php",
@@ -160,6 +235,27 @@
                 "Asc",
                 "Desc"
             ]
+        },
+        "Nvl\\Filterable\\Exceptions\\FilterableException": {
+            "kind": "class",
+            "file": "src/Exceptions/FilterableException.php",
+            "methods": [
+                "__construct",
+                "because",
+                "package",
+                "publicContext",
+                "responseCode",
+                "responseHeaders",
+                "suggestedStatus",
+                "toValidationException",
+                "translationKey",
+                "translationParameters"
+            ],
+            "properties": [
+                "errorCode",
+                "path"
+            ],
+            "constants": []
         },
         "Nvl\\Filterable\\Http\\QueryFilterSetFactory": {
             "kind": "class",

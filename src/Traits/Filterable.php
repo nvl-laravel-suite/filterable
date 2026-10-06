@@ -6,10 +6,9 @@ namespace Nvl\Filterable\Traits;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
 use Nvl\Filterable\Data\FilterSet;
 use Nvl\Filterable\Definitions\FilterSchema;
-use Nvl\Filterable\Services\EloquentFilterApplier;
-use Nvl\Filterable\Services\FilterCriterionNormalizer;
 
 /**
  * Applies explicit filter sets using the model's immutable allowlist.
@@ -33,7 +32,7 @@ trait Filterable
      */
     public function scopeApplyFilterSet(Builder $query, FilterSet $filters): Builder
     {
-        return (new EloquentFilterApplier(new FilterCriterionNormalizer))
+        return app(EloquentFilterApplierContract::class)
             ->apply($query, $filters, $this->filterSchema());
     }
 }

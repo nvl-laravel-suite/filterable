@@ -1,13 +1,5 @@
-# Contributing to NVL Filterable
+# Contributing
 
-This public repository is a publication mirror of private source. Open an issue
-here for a bug or proposal; include a reproduction and, if helpful, a patch.
-Maintainers apply accepted changes in source and publish a mirror release.
-Direct mirror pull requests do not update source. See the
-[organization contribution guide](https://github.com/nvl-laravel-suite/.github/blob/main/CONTRIBUTING.md).
+This repository is a read-only release mirror. Pull requests to the mirror are not accepted. Open a public issue with a reproducible example or a proposed patch. Maintainers apply reviewed changes in the private source repository and publish immutable releases from there.
 
-Changes must remain an allowlisted filtering and sorting layer, not a search or facets engine.
-
-Add Pest coverage for injection attempts, aliases, operators, normalization, relations, custom handlers, deterministic sorting, HTTP failures, complexity limits, and SQLite/PostgreSQL/MySQL parity. Run Pint, PHPStan at maximum strictness, Composer validation, dependency analysis, and package distribution validation.
-
-New operators or value types require explicit portable semantics, documentation, and generated DTO parity.
+Report vulnerabilities privately through the [security policy](https://github.com/nvl-laravel-suite/filterable/security/policy). Public issues must not contain undisclosed vulnerability details.
