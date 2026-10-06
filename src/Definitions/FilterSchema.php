@@ -8,6 +8,8 @@ use Nvl\Filterable\Exceptions\FilterableException;
 
 /**
  * Immutable allowlist for a query endpoint.
+ *
+ * @api
  */
 final readonly class FilterSchema
 {

@@ -10,6 +10,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * One validated sort request.
+ *
+ * @api
  */
 #[TypeScript]
 final class SortCriterion extends Data

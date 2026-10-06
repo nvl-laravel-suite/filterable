@@ -15,6 +15,8 @@ use Nvl\Filterable\Services\FilterCriterionNormalizer;
  * Applies explicit filter sets using the model's immutable allowlist.
  *
  * @template TModel of Model
+ *
+ * @api
  */
 trait Filterable
 {

@@ -11,6 +11,8 @@ use Nvl\Filterable\Exceptions\FilterableException;
 
 /**
  * Declares one public filter alias and its database behavior.
+ *
+ * @api
  */
 final readonly class FilterDefinition
 {

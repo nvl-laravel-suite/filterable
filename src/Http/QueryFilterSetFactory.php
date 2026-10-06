@@ -15,6 +15,8 @@ use Nvl\Filterable\Services\FilterCriterionNormalizer;
 
 /**
  * Converts HTTP query parameters into a validated transport-neutral filter set.
+ *
+ * @api
  */
 final class QueryFilterSetFactory
 {

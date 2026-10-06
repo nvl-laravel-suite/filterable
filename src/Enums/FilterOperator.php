@@ -8,6 +8,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Operators accepted by the generic allowlisted filter scope.
+ *
+ * @api
  */
 #[TypeScript]
 enum FilterOperator: string

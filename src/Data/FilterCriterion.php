@@ -11,6 +11,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * One validated filter request.
+ *
+ * @api
  */
 #[TypeScript]
 final class FilterCriterion extends Data

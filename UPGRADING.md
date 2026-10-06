@@ -32,3 +32,7 @@ Custom handlers now run inside a nested `where` group. This keeps a handler's or
 Review every custom handler before upgrading. Move joins, selected columns, grouping, and other query setup to the caller before applying the `FilterSet`, and express ordering with declared `SortDefinition` aliases. Handler return values remain compatible, but the handler must mutate only the nested predicate builder it receives.
 
 Handlers are trusted application code, not an authorization sandbox. Raw SQL or other arbitrary callback behavior can still bypass application authorization, so authorize independently and keep handlers bounded and parameterized.
+
+## Tagged consumer PHP boundary
+
+Use source `@api` workflows, extension contracts, and value types for application integration. Direct use of untagged implementations or `@internal` members is unsupported. This classification keeps existing concrete Action signatures and runtime behavior; it does not authorize package model persistence, ad hoc queries, relation traversal, or generic model serialization. Returned models are identity/result handles with only the explicitly declared in-memory read fields described in the README.

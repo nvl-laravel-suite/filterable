@@ -8,6 +8,8 @@ use Nvl\Filterable\Exceptions\FilterableException;
 
 /**
  * Declares one public sort alias.
+ *
+ * @api
  */
 final readonly class SortDefinition
 {

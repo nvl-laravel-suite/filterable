@@ -9,6 +9,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Transport-neutral filters and sorts for one query.
+ *
+ * @api
  */
 #[TypeScript]
 final class FilterSet extends Data

@@ -17,6 +17,8 @@ use Nvl\Filterable\Exceptions\FilterableException;
 
 /**
  * Applies validated aliases without accepting raw database identifiers.
+ *
+ * @api
  */
 final readonly class EloquentFilterApplier
 {

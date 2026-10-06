@@ -8,6 +8,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Directions accepted by allowlisted sorts.
+ *
+ * @api
  */
 #[TypeScript]
 enum SortDirection: string
