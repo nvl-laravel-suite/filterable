@@ -42,7 +42,7 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 ## Purpose
 
-`nvl/filterable` translates explicit typed filter sets into allowlisted Eloquent predicates and sorting on Laravel 13 and PHP 8.4+. It is not a facets engine, full-text search engine, authorization layer, or arbitrary query language.
+`nvl/filterable` translates explicit typed filter sets into allowlisted Eloquent predicates and sorting on Laravel 12–13 and PHP 8.4+. It is not a facets engine, full-text search engine, authorization layer, or arbitrary query language.
 
 The package depends only on `nvl/core` inside the NVL family. It has no migrations, routes, configuration, or host-model assumptions.
 
