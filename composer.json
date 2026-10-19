@@ -14,7 +14,7 @@
         "ext-filter": "*",
         "laravel/framework": "^12.0 || ^13.0",
         "nesbot/carbon": "^2.72 || ^3.0",
-        "nvl/core": "^5.0",
+        "nvl/core": "^6.0",
         "spatie/laravel-data": "^4.23"
     },
     "require-dev": {
@@ -49,7 +49,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "5.x-dev"
+            "dev-main": "6.x-dev"
         },
         "laravel": {
             "providers": [
