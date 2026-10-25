@@ -7,7 +7,6 @@ namespace Nvl\Filterable\Tests\Fixtures;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Nvl\Filterable\Data\FilterCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Definitions\SortDefinition;
@@ -100,12 +99,12 @@ final class FilterableRecord extends Model
                     'active_handler',
                     'is_active',
                     FilterValueType::Boolean,
-                    handler: static function (Builder $query, FilterCriterion $criterion): Builder {
-                        if (! is_bool($criterion->value)) {
+                    handler: static function (Builder $query, array $criterion): Builder {
+                        if (! is_bool($criterion['value'])) {
                             throw new FilterableException('Custom handlers must receive normalized values.');
                         }
 
-                        return $query->where('is_active', $criterion->value);
+                        return $query->where('is_active', $criterion['value']);
                     },
                 ),
                 new FilterDefinition(

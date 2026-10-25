@@ -14,44 +14,6 @@
             "properties": [],
             "constants": []
         },
-        "Nvl\\Filterable\\Data\\FilterCriterion": {
-            "kind": "class",
-            "file": "src/Data/FilterCriterion.php",
-            "methods": [
-                "__construct"
-            ],
-            "properties": [
-                "alias",
-                "operator",
-                "value"
-            ],
-            "constants": []
-        },
-        "Nvl\\Filterable\\Data\\FilterSet": {
-            "kind": "class",
-            "file": "src/Data/FilterSet.php",
-            "methods": [
-                "__construct",
-                "none"
-            ],
-            "properties": [
-                "filters",
-                "sorts"
-            ],
-            "constants": []
-        },
-        "Nvl\\Filterable\\Data\\SortCriterion": {
-            "kind": "class",
-            "file": "src/Data/SortCriterion.php",
-            "methods": [
-                "__construct"
-            ],
-            "properties": [
-                "alias",
-                "direction"
-            ],
-            "constants": []
-        },
         "Nvl\\Filterable\\Definitions\\FilterDefinition": {
             "kind": "class",
             "file": "src/Definitions/FilterDefinition.php",
@@ -242,30 +204,13 @@
             "methods": [
                 "__construct",
                 "because",
-                "package",
-                "publicContext",
                 "responseCode",
-                "responseHeaders",
-                "suggestedStatus",
-                "toValidationException",
-                "translationKey",
-                "translationParameters"
+                "toValidationException"
             ],
             "properties": [
                 "errorCode",
                 "path"
             ],
-            "constants": []
-        },
-        "Nvl\\Filterable\\Http\\QueryFilterSetFactory": {
-            "kind": "class",
-            "file": "src/Http/QueryFilterSetFactory.php",
-            "methods": [
-                "__construct",
-                "fromHttpQuery",
-                "fromQuery"
-            ],
-            "properties": [],
             "constants": []
         },
         "Nvl\\Filterable\\Services\\EloquentFilterApplier": {
@@ -283,7 +228,7 @@
             "file": "src/Traits/Filterable.php",
             "methods": [
                 "filterSchema",
-                "scopeApplyFilterSet"
+                "scopeApplyFilters"
             ],
             "properties": [],
             "constants": []

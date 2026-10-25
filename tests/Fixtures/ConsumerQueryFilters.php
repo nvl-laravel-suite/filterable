@@ -2,11 +2,8 @@
 
 declare(strict_types=1);
 
-namespace Nvl\Filterable\Http;
+namespace Nvl\Filterable\Tests\Fixtures;
 
-use Nvl\Filterable\Data\FilterCriterion;
-use Nvl\Filterable\Data\FilterSet;
-use Nvl\Filterable\Data\SortCriterion;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\SortDirection;
@@ -16,9 +13,9 @@ use Nvl\Filterable\Services\FilterCriterionNormalizer;
 /**
  * Converts HTTP query parameters into a validated transport-neutral filter set.
  *
- * @api
+ * Test-only consumer transport example; never distributed as package runtime.
  */
-final class QueryFilterSetFactory
+final class ConsumerQueryFilters
 {
     /**
      * Create an HTTP query adapter.
@@ -31,8 +28,9 @@ final class QueryFilterSetFactory
      * Build a filter set from query parameters.
      *
      * @param  array<string, mixed>  $query
+     * @return array{filters:list<array{alias:string,operator:FilterOperator,value:mixed}>,sorts:list<array{alias:string,direction:'asc'|'desc'}>}
      */
-    public function fromQuery(array $query, FilterSchema $schema): FilterSet
+    public function fromQuery(array $query, FilterSchema $schema): array
     {
         $rawFilters = $query['filter'] ?? [];
         $rawSorts = $query['sort'] ?? [];
@@ -129,22 +127,27 @@ final class QueryFilterSetFactory
                 );
             }
 
+            if (in_array($operator, [FilterOperator::In, FilterOperator::NotIn, FilterOperator::Between], true) && is_string($value)) {
+                $value = explode(',', $value);
+            }
+
             $filters[] = $this->normalizer->normalize(
-                new FilterCriterion($alias, $operator, $isNullCheck ? null : $value),
+                ['alias' => $alias, 'operator' => $operator, 'value' => $isNullCheck ? null : $value],
                 $definition,
                 $schema,
             );
         }
 
-        return new FilterSet($filters, $this->sorts($rawSorts, $schema));
+        return ['filters' => $filters, 'sorts' => $this->sorts($rawSorts, $schema)];
     }
 
     /**
      * Build a filter set and map malformed HTTP input to a standard 422 response.
      *
      * @param  array<string, mixed>  $query
+     * @return array{filters:list<array{alias:string,operator:FilterOperator,value:mixed}>,sorts:list<array{alias:string,direction:'asc'|'desc'}>}
      */
-    public function fromHttpQuery(array $query, FilterSchema $schema): FilterSet
+    public function fromHttpQuery(array $query, FilterSchema $schema): array
     {
         try {
             return $this->fromQuery($query, $schema);
@@ -156,7 +159,7 @@ final class QueryFilterSetFactory
     /**
      * Parse HTTP sort syntax.
      *
-     * @return list<SortCriterion>
+     * @return list<array{alias:string,direction:'asc'|'desc'}>
      */
     private function sorts(mixed $input, FilterSchema $schema): array
     {
@@ -227,7 +230,7 @@ final class QueryFilterSetFactory
                 );
             }
 
-            $sorts[] = new SortCriterion($alias, $direction);
+            $sorts[] = ['alias' => $alias, 'direction' => $direction->value];
             $aliases[] = $alias;
         }
 

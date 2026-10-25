@@ -7,11 +7,10 @@ namespace Nvl\Filterable\Traits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
-use Nvl\Filterable\Data\FilterSet;
 use Nvl\Filterable\Definitions\FilterSchema;
 
 /**
- * Applies explicit filter sets using the model's immutable allowlist.
+ * Applies native filters and sorts using the model's immutable allowlist.
  *
  * @template TModel of Model
  *
@@ -25,14 +24,16 @@ trait Filterable
     abstract public function filterSchema(): FilterSchema;
 
     /**
-     * Apply a transport-neutral filter set.
+     * Apply native filters and sorts.
      *
      * @param  Builder<TModel>  $query
+     * @param  array<array-key, mixed>  $filters  Native filter list; see EloquentFilterApplierContract.
+     * @param  array<array-key, mixed>  $sorts  Native sort list; see EloquentFilterApplierContract.
      * @return Builder<TModel>
      */
-    public function scopeApplyFilterSet(Builder $query, FilterSet $filters): Builder
+    public function scopeApplyFilters(Builder $query, array $filters = [], array $sorts = []): Builder
     {
         return app(EloquentFilterApplierContract::class)
-            ->apply($query, $filters, $this->filterSchema());
+            ->apply($query, $this->filterSchema(), $filters, $sorts);
     }
 }

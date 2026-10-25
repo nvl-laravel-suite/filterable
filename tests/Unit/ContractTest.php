@@ -3,16 +3,14 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
-use Nvl\Filterable\Data\FilterCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Definitions\SortDefinition;
 use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\FilterValueType;
-use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
-use Nvl\Filterable\Http\QueryFilterSetFactory;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
+use Nvl\Filterable\Tests\Fixtures\ConsumerQueryFilters;
 
 it('rejects malformed filter definitions', function (Closure $definition, string $message): void {
     expect($definition)->toThrow(FilterableException::class, $message);
@@ -213,7 +211,7 @@ it('rejects malformed query transport variants', function (array $query, string 
         maximumSorts: 1,
     );
 
-    expect(fn () => app(QueryFilterSetFactory::class)->fromQuery($query, $schema))
+    expect(fn () => app(ConsumerQueryFilters::class)->fromQuery($query, $schema))
         ->toThrow(FilterableException::class, $message);
 })->with([
     'scalar filter container' => [['filter' => 'name'], 'must be an object'],
@@ -236,15 +234,15 @@ it('normalizes comma-separated sets and associative sort directions', function (
             new SortDefinition('name', 'name'),
         ],
     );
-    $set = app(QueryFilterSetFactory::class)->fromQuery([
+    $set = app(ConsumerQueryFilters::class)->fromQuery([
         'filter' => [
             'name' => ['operator' => 'in', 'value' => 'Alpha,Beta'],
         ],
         'sort' => ['name' => 'DESC'],
     ], $schema);
 
-    expect($set->filters[0]->value)->toBe(['Alpha', 'Beta'])
-        ->and($set->sorts[0]->direction)->toBe(SortDirection::Desc);
+    expect($set['filters'][0]['value'])->toBe(['Alpha', 'Beta'])
+        ->and($set['sorts'][0]['direction'])->toBe('desc');
 });
 
 it('rejects invalid normalization shapes and values', function (
@@ -255,7 +253,7 @@ it('rejects invalid normalization shapes and values', function (
     string $message,
 ): void {
     expect(fn () => app(FilterCriterionNormalizer::class)->normalize(
-        new FilterCriterion($definition->alias, $operator, $value),
+        ['alias' => $definition->alias, 'operator' => $operator, 'value' => $value],
         $definition,
         $schema,
     ))->toThrow(FilterableException::class, $message);
@@ -279,7 +277,7 @@ it('rejects invalid normalization shapes and values', function (
         FilterOperator::In,
         1,
         new FilterSchema(filters: [], sorts: []),
-        'list or comma-separated string',
+        'list',
     ],
     'empty set' => [
         new FilterDefinition('name', 'name', operators: [FilterOperator::In]),
@@ -318,7 +316,7 @@ it('rejects invalid normalization shapes and values', function (
     ],
 ]);
 
-it('normalizes trusted date objects, backed enums, and stringable values', function (): void {
+it('normalizes native dates, backed enum values, and consumer string projections', function (): void {
     $normalizer = app(FilterCriterionNormalizer::class);
     $schema = new FilterSchema(filters: [], sorts: []);
     $dateDefinition = new FilterDefinition('created', 'created_at', FilterValueType::Date);
@@ -339,33 +337,29 @@ it('normalizes trusted date objects, backed enums, and stringable values', funct
     };
 
     $date = $normalizer->normalize(
-        new FilterCriterion('created', FilterOperator::Equals, new DateTimeImmutable('2026-01-01')),
+        ['alias' => 'created', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01'],
         $dateDefinition,
         $schema,
     );
     $dateTime = $normalizer->normalize(
-        new FilterCriterion(
-            'occurred',
-            FilterOperator::Equals,
-            new DateTimeImmutable('2026-01-01T12:00:00+02:00'),
-        ),
+        ['alias' => 'occurred', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01T12:00:00+02:00'],
         $dateTimeDefinition,
         $schema,
     );
     $enum = $normalizer->normalize(
-        new FilterCriterion('operator', FilterOperator::Equals, FilterOperator::Equals),
+        ['alias' => 'operator', 'operator' => FilterOperator::Equals, 'value' => FilterOperator::Equals->value],
         $enumDefinition,
         $schema,
     );
     $string = $normalizer->normalize(
-        new FilterCriterion('name', FilterOperator::Equals, $stringable),
+        ['alias' => 'name', 'operator' => FilterOperator::Equals, 'value' => (string) $stringable],
         $stringDefinition,
         $schema,
     );
 
-    expect($date->value)->toBe('2026-01-01')
-        ->and($dateTime->value)->toBeInstanceOf(CarbonImmutable::class)
-        ->and($dateTime->value->toIso8601String())->toBe('2026-01-01T10:00:00+00:00')
-        ->and($enum->value)->toBe('equals')
-        ->and($string->value)->toBe('Alpha');
+    expect($date['value'])->toBe('2026-01-01')
+        ->and($dateTime['value'])->toBeInstanceOf(CarbonImmutable::class)
+        ->and($dateTime['value']->toIso8601String())->toBe('2026-01-01T10:00:00+00:00')
+        ->and($enum['value'])->toBe('equals')
+        ->and($string['value'])->toBe('Alpha');
 });

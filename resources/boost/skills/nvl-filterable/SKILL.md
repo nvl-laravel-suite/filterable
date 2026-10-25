@@ -1,74 +1,23 @@
 ---
 name: nvl-filterable
-description: Implement, integrate, test, or review nvl/filterable in Laravel 13. Use for allowlisted Eloquent filters, typed filter sets, HTTP query parsing, safe relation filtering, sort aliases, operator rules, complexity limits, or database-portable filtering.
+description: Implement, integrate, test, or review native nvl/filterable in Laravel 13. Use for allowlisted Eloquent filters, scalar and list normalization, safe relation predicates, sort aliases and query complexity.
 ---
 
 # NVL Filterable
 
-Treat filtering as an explicit allowlisted query contract, not a general search or facets engine.
+Use `FilterSchema`, `FilterDefinition` and `SortDefinition` to allowlist every alias, database path, type, operator, enum value and null behavior. Declare bounded filter/sort/value/string limits, defaults and a stable tie-breaker. Never accept caller-provided columns, relations or SQL fragments.
 
-## Declare filters
+Call `EloquentFilterApplierContract::apply($query, $schema, $filters = [], $sorts = [])`, or a host model's `applyFilters($filters, $sorts)` scope. Both arrays are lists:
 
-- Define every accepted alias, target column or relation, compatible operator set, value type, null behavior, and custom handler.
-- Declare sort aliases, deterministic defaults, and a stable pagination tie-breaker.
-- Never pass user-provided column names, relation paths, or directions directly to Eloquent.
-- Keep relation aliases shallow and bounded.
+- Filters: `array{alias:string,operator:FilterOperator|string,value?:scalar|array|null}`. Sets/ranges require native scalar lists. Other values must match the declared type. Null checks allow omission or explicit null.
+- Sorts: `array{alias:string,direction:'asc'|'desc'}`. Exact lowercase direction and declared aliases are required.
 
-## Parse and apply
+The applier validates all entries before changing the builder. Unknown keys, unsupported aliases/operators, malformed values, duplicates and excess complexity fail closed. Empty sorts select schema defaults and append the tie-breaker once. Contains values are literal substrings with escaped wildcards.
 
-- Build a typed `FilterSet` independently of HTTP.
-- Use `QueryFilterSetFactory::fromHttpQuery()` at request boundaries and `fromQuery()` for transport-neutral callers.
-- Apply criteria through `EloquentFilterApplier` or the `Filterable` trait.
-- Reject malformed query objects, booleans, ranges, sets, dates, arrays, duplicate sorts, unsupported operators, and excess filter/sort/value/string complexity.
-- Treat `contains` and `not_contains` values as literal substrings by escaping SQL wildcard characters.
-- Expect custom handlers to receive already-normalized criteria.
-- Keep custom handlers predicate-only. They run inside a nested `where` group so ordinary `orWhere` clauses preserve caller predicates.
-- Prepare joins and selected columns before applying filters, and express ordering through declared sort definitions.
-- Treat handlers as trusted callbacks rather than an authorization sandbox; raw SQL can still bypass application rules, so authorize independently.
-- Choose an explicit driver strategy where string or date behavior differs by database.
+Consumers own HTTP parsing, comma splitting, scalar shorthand, DTOs, frontend types and response mapping. Package Data carriers and the HTTP factory are retired without aliases. Catch `FilterableException` in a controller and use `toValidationException()` where a 422 response is desired. Direct CLI/job calls receive the same validation guarantees.
 
-## Verify
+Custom handlers receive a nested Eloquent builder and normalized `array{alias:string,operator:FilterOperator,value:mixed}`; date-times normalize to UTC CarbonImmutable. Handlers mutate predicates only and execute inside grouped where clauses, preserving caller predicates when ordinary orWhere is used. They are trusted callbacks, so authorize independently and keep SQL parameterized.
 
-Test injection payloads, unknown aliases, null and empty values, booleans, sets, ranges, date-time zones, relations, custom handlers, default sorting, complexity limits, and SQLite/PostgreSQL/MySQL parity.
+Inject the focused applier contract for host substitution. Native container prebindings remain intact. Use real host-owned rows to test filtering correctness; a mock proves orchestration only. Test malicious shapes/keys, aliases, strict types, null/empty values, lists/ranges, dates/zones, literals, relations, custom OR predicates, limits, duplicate sorts and deterministic pagination. Verify production driver behavior explicitly.
 
-## Ownership isolation and release discipline
-
-- Keep unowned applications independent of the enforcement runtime; native ownership never adds an undeclared Auth or Suite dependency. Tenancy-specific APIs are deprecated bridge compatibility.
-- Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic owner delete-all path or raw cross-package cleanup.
-- Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, owner-partitioned queries, and standalone consumption as release contracts.
-
-## Canonical configuration ownership
-
-- This package does not ship a package config file or package environment variables. Configure behavior through its typed APIs; do not invent a `nvl-filterable` config root.
-- When composing configured NVL packages, use their shipped canonical `nvl-<package>` roots and `NVL_<PACKAGE>_*` inputs. Core's generic config/environment compatibility is default off and applies only to explicitly selected historical inputs.
-- Keep logical package/tenant resource identifiers unchanged and use the package's canonical skill publication tag. Preserve host global registrations.
-
-## Application workflow substitution
-
-The existing model scope now resolves EloquentFilterApplierContract. Its singleton default resolves the native concrete through the supplied container; parsing/schema APIs remain direct.
-
-The supported workflow injection names are `EloquentFilterApplierContract`.
-
-Inject the supported contract into host orchestration and bind a native interface
-mock or host implementation before resolving that orchestration. Keep concrete
-constructors and native workflow bodies intact; internal chains remain package-owned.
-Use declared DTOs or unsaved model identity handles for orchestration fixtures.
-Use real package workflows and Laravel framework fakes for persistence, tenant,
-queue, file, and external-effect integration checks. A host substitute proves
-only the host call and result. Keep public declarations tagged `@api` and
-constructor/configuration/private helpers internal.
-
-Consult the owning README's Testing your app section for native examples. Include
-`vendor/nvl/core/support/consumer-audit.neon` in host PHPStan and declare explicit
-`nvlConsumer.testPaths`; the Suite workbench is not consumer tooling.
-
-
-## Consumer runtime and testing contracts
-
-Start with the package README Quickstart and Testing your app sections. Use `nvl:install <package>` for loaded-package common config publication; it does not enable features, run schema or refresh caches. Preserve native host owner keys/morph maps and selected host Auth and ownership defaults. Read full runtime defaults and publish advanced config only deliberately.
-
-Inject the supported focused interfaces and preserve host bindings. Returned model handles do not permit package-table queries/writes outside documented capability/extension seams. Host tests may substitute contracts in Laravel's container, use shipped model factories (ordinary make may persist parents; withoutParents()->make is detached), and use Laravel effect fakes deliberately. Only Media/Stripe have dedicated provider/library fakes; do not invent a universal package fake. Settings InteractsWithSettings is definition-only. Host PHPStan may include vendor/nvl/core/support/consumer-audit.neon; no unpublished workbench command is a consumer requirement.
-
-Read docs/events.md and the package README error table. Domain events use schemaVersion=1, model-free facts and actual source-connection commit callbacks; only six declared old Event suffix aliases remain deprecated through major 6. Migrate exact listeners/fakes and suffix wildcards, drain old queued payloads, rebuild event cache and restart workers. Delivery is not a durable outbox. The Core exception renderer is opt-in, JSON-only for respondable failures, with exactly message/code/context and host-selected locale. Do not expose diagnostics or reinterpret missing bindings as authorization denial.
-
-Core package logging uses nvl/normal with CSV quiet by default, stable message keys and bounded context; incidents survive quiet. Do not mutate global logger context or log raw row/provider/content/credential payloads. Run only authorized project checks and report new acceptance as pending until actual output exists.
+The only family dependency is Core's native exception/resource support. Data, transformer and Ownership runtimes are not required. No config or migration is shipped. Publish guidance through `nvl-filterable-skills` and translations through `nvl-filterable-translations`; preserve host resource names. Consult README.md and UPGRADING.md for native examples.

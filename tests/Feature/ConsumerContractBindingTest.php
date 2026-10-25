@@ -6,7 +6,9 @@ use Illuminate\Config\Repository;
 use Illuminate\Container\Container;
 use Illuminate\Filesystem\FilesystemServiceProvider;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\ServiceProvider;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
+use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Providers\FilterableServiceProvider;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Tests\TestCase;
@@ -129,4 +131,26 @@ test('provider registration preserves early interface bindings in a second nativ
         Container::setInstance($this->app);
         $consumer->flush();
     }
+});
+
+test('native applier exposes the schema then optional native filter and sort lists', function (): void {
+    $method = new ReflectionMethod(EloquentFilterApplierContract::class, 'apply');
+    $parameters = $method->getParameters();
+
+    expect(array_map(static fn (ReflectionParameter $parameter): string => $parameter->getName(), $parameters))
+        ->toBe(['query', 'schema', 'filters', 'sorts'])
+        ->and((string) $parameters[1]->getType())->toBe(FilterSchema::class)
+        ->and((string) $parameters[2]->getType())->toBe('array')
+        ->and($parameters[2]->getDefaultValue())->toBe([])
+        ->and((string) $parameters[3]->getType())->toBe('array')
+        ->and($parameters[3]->getDefaultValue())->toBe([]);
+});
+
+test('provider publishes canonical native package resources', function (): void {
+    $skills = ServiceProvider::pathsToPublish(FilterableServiceProvider::class, 'nvl-filterable-skills');
+    $translations = ServiceProvider::pathsToPublish(FilterableServiceProvider::class, 'nvl-filterable-translations');
+
+    expect(array_values($skills))->toBe([base_path('.agents/skills')])
+        ->and(array_values($translations))->toBe([lang_path('vendor/nvl-filterable')])
+        ->and(ServiceProvider::pathsToPublish(FilterableServiceProvider::class, 'filterable-skills'))->toBe([]);
 });

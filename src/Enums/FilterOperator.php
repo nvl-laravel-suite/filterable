@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Filterable\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * Operators accepted by the generic allowlisted filter scope.
  *
  * @api
  */
-#[TypeScript]
 enum FilterOperator: string
 {
     case Equals = 'equals';

@@ -7,13 +7,9 @@ namespace Nvl\Filterable\Services;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
-use Nvl\Filterable\Data\FilterCriterion;
-use Nvl\Filterable\Data\FilterSet;
-use Nvl\Filterable\Data\SortCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
-use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
 
 /**
@@ -36,42 +32,26 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $query
+     * @param  array<array-key, mixed>  $filters  List of array{alias:string, operator:FilterOperator|string, value?:scalar|array|null}.
+     * @param  array<array-key, mixed>  $sorts  List of array{alias:string, direction:'asc'|'desc'}.
      * @return Builder<TModel>
      */
-    public function apply(Builder $query, FilterSet $set, FilterSchema $schema): Builder
+    public function apply(Builder $query, FilterSchema $schema, array $filters = [], array $sorts = []): Builder
     {
-        if (count($set->filters) > $schema->maximumFilters) {
-            throw new FilterableException(
-                'The filter complexity limit was exceeded.',
-                'filter_complexity_exceeded',
-                'filter',
-            );
-        }
-
-        foreach ($set->filters as $criterion) {
-            $definition = $schema->filter($criterion->alias);
-
-            if ($definition === null) {
-                throw new FilterableException(
-                    "Unknown filter alias [{$criterion->alias}].",
-                    'unknown_filter_alias',
-                    "filter.{$criterion->alias}",
-                );
+        $filters = $this->normalizer->filters($filters, $schema);
+        $sorts = $this->normalizer->sorts($sorts, $schema);
+        foreach ($filters as $criterion) {
+            $definition = $schema->filter($criterion['alias']);
+            if ($definition !== null) {
+                $this->applyDefinition($query, $criterion, $definition);
             }
-
-            if (! in_array($criterion->operator, $definition->operators, true)) {
-                throw new FilterableException(
-                    "Operator [{$criterion->operator->value}] is not allowed for [{$criterion->alias}].",
-                    'disallowed_filter_operator',
-                    "filter.{$criterion->alias}.operator",
-                );
-            }
-
-            $normalized = $this->normalizer->normalize($criterion, $definition, $schema);
-            $this->applyDefinition($query, $normalized, $definition);
         }
-
-        $this->applySorts($query, $set, $schema);
+        foreach ($sorts as $sort) {
+            $definition = $schema->sort($sort['alias']);
+            if ($definition !== null) {
+                $query->orderBy($definition->column, $sort['direction']);
+            }
+        }
 
         return $query;
     }
@@ -82,10 +62,11 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $query
+     * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      */
     private function applyDefinition(
         Builder $query,
-        FilterCriterion $criterion,
+        array $criterion,
         FilterDefinition $definition,
     ): void {
         if ($definition->handler !== null) {
@@ -117,14 +98,15 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $query
+     * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      * @return Builder<TModel>
      */
     private function applyOperator(
         Builder $query,
         string $column,
-        FilterCriterion $criterion,
+        array $criterion,
     ): Builder {
-        $operator = $criterion->operator;
+        $operator = $criterion['operator'];
 
         if ($operator === FilterOperator::IsNull) {
             return $query->whereNull($column);
@@ -147,14 +129,14 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         }
 
         return match ($operator) {
-            FilterOperator::Equals => $query->where($column, '=', $criterion->value),
-            FilterOperator::NotEquals => $query->where($column, '!=', $criterion->value),
+            FilterOperator::Equals => $query->where($column, '=', $criterion['value']),
+            FilterOperator::NotEquals => $query->where($column, '!=', $criterion['value']),
             FilterOperator::Contains => $this->whereContains($query, $column, $criterion, false),
             FilterOperator::NotContains => $this->whereContains($query, $column, $criterion, true),
-            FilterOperator::Before, FilterOperator::Lt => $query->where($column, '<', $criterion->value),
-            FilterOperator::After, FilterOperator::Gt => $query->where($column, '>', $criterion->value),
-            FilterOperator::Gte => $query->where($column, '>=', $criterion->value),
-            FilterOperator::Lte => $query->where($column, '<=', $criterion->value),
+            FilterOperator::Before, FilterOperator::Lt => $query->where($column, '<', $criterion['value']),
+            FilterOperator::After, FilterOperator::Gt => $query->where($column, '>', $criterion['value']),
+            FilterOperator::Gte => $query->where($column, '>=', $criterion['value']),
+            FilterOperator::Lte => $query->where($column, '<=', $criterion['value']),
         };
     }
 
@@ -164,26 +146,27 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @template TModel of Model
      *
      * @param  Builder<TModel>  $query
+     * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      * @return Builder<TModel>
      */
     private function whereContains(
         Builder $query,
         string $column,
-        FilterCriterion $criterion,
+        array $criterion,
         bool $negated,
     ): Builder {
-        if (! is_string($criterion->value)) {
+        if (! is_string($criterion['value'])) {
             throw new FilterableException(
-                "Filter [{$criterion->alias}] requires a string value.",
+                "Filter [{$criterion['alias']}] requires a string value.",
                 'invalid_string_filter_value',
-                "filter.{$criterion->alias}.value",
+                "filter.{$criterion['alias']}.value",
             );
         }
 
         $grammar = $query->getQuery()->getGrammar();
         $wrapped = $grammar->wrap($column);
         $this->ensureSafeWrappedColumn($wrapped);
-        $needle = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $criterion->value).'%';
+        $needle = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $criterion['value']).'%';
 
         return $negated
             ? $query->whereRaw("{$wrapped} NOT LIKE ? ESCAPE '!'", [$needle])
@@ -193,19 +176,20 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
     /**
      * Read an already-normalized list value.
      *
+     * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      * @return list<mixed>
      */
-    private function normalizedList(FilterCriterion $criterion): array
+    private function normalizedList(array $criterion): array
     {
-        if (! is_array($criterion->value) || ! array_is_list($criterion->value)) {
+        if (! is_array($criterion['value']) || ! array_is_list($criterion['value'])) {
             throw new FilterableException(
-                "Filter [{$criterion->alias}] requires a normalized value list.",
+                "Filter [{$criterion['alias']}] requires a normalized value list.",
                 'invalid_filter_value_shape',
-                "filter.{$criterion->alias}.value",
+                "filter.{$criterion['alias']}.value",
             );
         }
 
-        return $criterion->value;
+        return $criterion['value'];
     }
 
     /**
@@ -220,73 +204,6 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
                 'The database grammar returned an unsafe column identifier.',
                 'unsafe_wrapped_filter_column',
             );
-        }
-    }
-
-    /**
-     * Apply explicit or default sorts and append the declared tie-breaker.
-     *
-     * @template TModel of Model
-     *
-     * @param  Builder<TModel>  $query
-     */
-    private function applySorts(Builder $query, FilterSet $set, FilterSchema $schema): void
-    {
-        if (count($set->sorts) > $schema->maximumSorts) {
-            throw new FilterableException(
-                'The sort complexity limit was exceeded.',
-                'sort_complexity_exceeded',
-                'sort',
-            );
-        }
-
-        $sorts = $set->sorts === []
-            ? array_map(
-                static fn (string $sort): SortCriterion => new SortCriterion(
-                    str_starts_with($sort, '-') ? substr($sort, 1) : $sort,
-                    str_starts_with($sort, '-') ? SortDirection::Desc : SortDirection::Asc,
-                ),
-                $schema->defaultSorts,
-            )
-            : $set->sorts;
-
-        $aliases = [];
-
-        foreach ($sorts as $sort) {
-            if (in_array($sort->alias, $aliases, true)) {
-                throw new FilterableException(
-                    "Duplicate sort [{$sort->alias}] is not allowed.",
-                    'duplicate_sort',
-                    'sort',
-                );
-            }
-
-            $definition = $schema->sort($sort->alias);
-
-            if ($definition === null) {
-                throw new FilterableException(
-                    "Unknown sort alias [{$sort->alias}].",
-                    'unknown_sort_alias',
-                    'sort',
-                );
-            }
-
-            $query->orderBy($definition->column, $sort->direction->value);
-            $aliases[] = $sort->alias;
-        }
-
-        if ($schema->tieBreakerSort !== null && ! in_array($schema->tieBreakerSort, $aliases, true)) {
-            $tieBreaker = $schema->sort($schema->tieBreakerSort);
-
-            if ($tieBreaker === null) {
-                throw new FilterableException(
-                    "Unknown tie-breaker sort [{$schema->tieBreakerSort}].",
-                    'unknown_tie_breaker_sort',
-                    'sort',
-                );
-            }
-
-            $query->orderBy($tieBreaker->column);
         }
     }
 }

@@ -5,9 +5,6 @@ declare(strict_types=1);
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Nvl\Filterable\Data\FilterCriterion;
-use Nvl\Filterable\Data\FilterSet;
-use Nvl\Filterable\Data\SortCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Definitions\SortDefinition;
@@ -66,17 +63,17 @@ test('custom OR filter preserves the caller ownership predicate', function (stri
         new FilterDefinition(
             'search',
             'name',
-            handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
-                ->orWhere('name', $criterion->value),
+            handler: static fn (Builder $query, array $criterion): Builder => $query
+                ->orWhere('name', $criterion['value']),
         ),
     ], []);
-    $set = new FilterSet([
-        new FilterCriterion('search', FilterOperator::Equals, 'match'),
-    ]);
+    $set = ['filters' => [
+        ['alias' => 'search', 'operator' => FilterOperator::Equals, 'value' => 'match'],
+    ], 'sorts' => []];
     $query = PredicateRecord::query()->where('owner', $owner);
 
     $ids = app(EloquentFilterApplier::class)
-        ->apply($query, $set, $schema)
+        ->apply($query, $schema, $set['filters'], $set['sorts'])
         ->pluck('id')
         ->all();
 
@@ -95,30 +92,22 @@ test('negative and null custom predicates preserve the caller ownership predicat
             'not_name',
             'name',
             operators: [FilterOperator::NotEquals],
-            handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
-                ->orWhere('name', '!=', $criterion->value),
+            handler: static fn (Builder $query, array $criterion): Builder => $query
+                ->orWhere('name', '!=', $criterion['value']),
         ),
         new FilterDefinition(
             'missing_name',
             'name',
             operators: [FilterOperator::IsNull],
             nullable: true,
-            handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
+            handler: static fn (Builder $query, array $criterion): Builder => $query
                 ->orWhereNull('name'),
         ),
     ], []);
     $applier = app(EloquentFilterApplier::class);
 
-    $negativeIds = $applier->apply(
-        PredicateRecord::query()->where('owner', 'a'),
-        new FilterSet([new FilterCriterion('not_name', FilterOperator::NotEquals, 'skip')]),
-        $schema,
-    )->pluck('id')->all();
-    $nullIds = $applier->apply(
-        NullablePredicateRecord::query()->where('owner', 'a'),
-        new FilterSet([new FilterCriterion('missing_name', FilterOperator::IsNull)]),
-        $schema,
-    )->pluck('id')->all();
+    $negativeIds = $applier->apply(PredicateRecord::query()->where('owner', 'a'), $schema, [['alias' => 'not_name', 'operator' => FilterOperator::NotEquals, 'value' => 'skip']], [])->pluck('id')->all();
+    $nullIds = $applier->apply(NullablePredicateRecord::query()->where('owner', 'a'), $schema, [['alias' => 'missing_name', 'operator' => FilterOperator::IsNull, 'value' => null]], [])->pluck('id')->all();
 
     expect($negativeIds)->toBe([$kept->id])
         ->and($nullIds)->toBe([$null->id]);
@@ -135,32 +124,25 @@ test('multiple custom predicates retain sorting pagination and count semantics',
             new FilterDefinition(
                 'starts_with',
                 'name',
-                handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
-                    ->orWhere('name', 'like', $criterion->value.'%'),
+                handler: static fn (Builder $query, array $criterion): Builder => $query
+                    ->orWhere('name', 'like', $criterion['value'].'%'),
             ),
             new FilterDefinition(
                 'not_name',
                 'name',
                 operators: [FilterOperator::NotEquals],
-                handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
-                    ->orWhere('name', '!=', $criterion->value),
+                handler: static fn (Builder $query, array $criterion): Builder => $query
+                    ->orWhere('name', '!=', $criterion['value']),
             ),
         ],
         sorts: [new SortDefinition('name', 'name')],
     );
-    $set = new FilterSet(
-        filters: [
-            new FilterCriterion('starts_with', FilterOperator::Equals, 'b'),
-            new FilterCriterion('not_name', FilterOperator::NotEquals, 'alpha'),
-        ],
-        sorts: [new SortCriterion('name', SortDirection::Desc)],
-    );
+    $set = ['filters' => [
+        ['alias' => 'starts_with', 'operator' => FilterOperator::Equals, 'value' => 'b'],
+        ['alias' => 'not_name', 'operator' => FilterOperator::NotEquals, 'value' => 'alpha'],
+    ], 'sorts' => [['alias' => 'name', 'direction' => SortDirection::Desc->value]]];
 
-    $query = app(EloquentFilterApplier::class)->apply(
-        PredicateRecord::query()->where('owner', 'a'),
-        $set,
-        $schema,
-    );
+    $query = app(EloquentFilterApplier::class)->apply(PredicateRecord::query()->where('owner', 'a'), $schema, $set['filters'], $set['sorts']);
     $count = (clone $query)->count();
     $page = (clone $query)->paginate(perPage: 1, page: 1);
 
@@ -195,25 +177,17 @@ test('relation predicates retain caller and related ownership constraints', func
         new FilterDefinition(
             'group_search',
             'group.name',
-            handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
+            handler: static fn (Builder $query, array $criterion): Builder => $query
                 ->orWhereHas(
                     'group',
-                    static fn (Builder $related): Builder => $related->where('name', $criterion->value),
+                    static fn (Builder $related): Builder => $related->where('name', $criterion['value']),
                 ),
         ),
     ], []);
     $applier = app(EloquentFilterApplier::class);
 
-    $declaredRelationIds = $applier->apply(
-        RelatedPredicateRecord::query()->where('owner', 'a'),
-        new FilterSet([new FilterCriterion('group', FilterOperator::Equals, 'shared')]),
-        $schema,
-    )->pluck('id')->all();
-    $customRelationIds = $applier->apply(
-        RelatedPredicateRecord::query()->where('owner', 'a'),
-        new FilterSet([new FilterCriterion('group_search', FilterOperator::Equals, 'shared')]),
-        $schema,
-    )->pluck('id')->all();
+    $declaredRelationIds = $applier->apply(RelatedPredicateRecord::query()->where('owner', 'a'), $schema, [['alias' => 'group', 'operator' => FilterOperator::Equals, 'value' => 'shared']], [])->pluck('id')->all();
+    $customRelationIds = $applier->apply(RelatedPredicateRecord::query()->where('owner', 'a'), $schema, [['alias' => 'group_search', 'operator' => FilterOperator::Equals, 'value' => 'shared']], [])->pluck('id')->all();
 
     expect($declaredRelationIds)->toBe([$valid->id])
         ->and($customRelationIds)->toBe([$valid->id]);
@@ -228,23 +202,31 @@ test('empty sets and consumers without ownership predicates retain normal behavi
         new FilterDefinition(
             'search',
             'name',
-            handler: static fn (Builder $query, FilterCriterion $criterion): Builder => $query
-                ->orWhere('name', $criterion->value),
+            handler: static fn (Builder $query, array $criterion): Builder => $query
+                ->orWhere('name', $criterion['value']),
         ),
     ], []);
     $applier = app(EloquentFilterApplier::class);
 
-    $emptyIds = $applier->apply(
-        PredicateRecord::query()->where('owner', 'a'),
-        FilterSet::none(),
-        $schema,
-    )->orderBy('id')->pluck('id')->all();
-    $unscopedIds = $applier->apply(
-        PredicateRecord::query(),
-        new FilterSet([new FilterCriterion('search', FilterOperator::Equals, 'match')]),
-        $schema,
-    )->orderBy('id')->pluck('id')->all();
+    $emptyIds = $applier->apply(PredicateRecord::query()->where('owner', 'a'), $schema, [], [])->orderBy('id')->pluck('id')->all();
+    $unscopedIds = $applier->apply(PredicateRecord::query(), $schema, [['alias' => 'search', 'operator' => FilterOperator::Equals, 'value' => 'match']], [])->orderBy('id')->pluck('id')->all();
 
     expect($emptyIds)->toBe([$a->id, $other->id])
         ->and($unscopedIds)->toBe([$a->id, $b->id]);
+});
+
+test('native custom OR filters cannot escape a grouped caller scope', function (): void {
+    $kept = PredicateRecord::query()->create(['owner' => 'a', 'name' => 'match']);
+    PredicateRecord::query()->create(['owner' => 'b', 'name' => 'match']);
+    PredicateRecord::query()->create(['owner' => 'a', 'name' => 'other']);
+    $schema = new FilterSchema([
+        new FilterDefinition('search', 'name', handler: static fn (Builder $query, array $criterion): Builder => $query
+            ->where('name', 'never')->orWhere('name', $criterion['value'])),
+    ], []);
+    $query = PredicateRecord::query()->where(fn (Builder $scope): Builder => $scope
+        ->where('owner', 'a')->orWhere('owner', 'c'));
+
+    expect(app(EloquentFilterApplier::class)->apply($query, $schema, [
+        ['alias' => 'search', 'operator' => 'equals', 'value' => 'match'],
+    ])->pluck('id')->all())->toBe([$kept->id]);
 });

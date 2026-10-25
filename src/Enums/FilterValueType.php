@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Filterable\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
-
 /**
  * Scalar shapes accepted by declared filters.
  *
  * @api
  */
-#[TypeScript]
 enum FilterValueType: string
 {
     case Boolean = 'boolean';

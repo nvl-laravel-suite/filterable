@@ -4,54 +4,22 @@
 
 ```sh
 composer require nvl/filterable:^6.0
-php artisan nvl:install filterable --dry-run
-php artisan nvl:install filterable
-```
-
-Required NVL dependencies: `nvl/core` (`^6.0`). Declare an allowlisted FilterSchema and parse validated filters into FilterSet. The query must be for a host-owned model; filters are not authorization.
-Review the published common config, select one migration owner, and run schema preflight before existing-table upgrades. The installer does not enable features or run migrations. Follow the detailed installation and capability sections below before invoking a storage/provider operation.
-
-Inject `Nvl\Filterable\Contracts\EloquentFilterApplierContract` in a host service. After supplying the trusted inputs described above, the first public call is:
-
-```php
-use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
-
-/** @var EloquentFilterApplierContract $capability */
-$result = $capability->apply($hostQuery, $filters, $schema);
-```
-
-Use the [event catalog](docs/events.md) and [Testing your app](#testing-your-app) below. The suite [getting-started guide](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/getting-started.md) provides a complete Comments host fixture; package archives retain their own local references.
-
-
-[← NVL Laravel Suite](https://github.com/nvl-laravel-suite)
-
-For support, [open an issue](https://github.com/nvl-laravel-suite/filterable/issues). For vulnerabilities, use
-[private reporting](https://github.com/nvl-laravel-suite/filterable/security/advisories/new). See [Contributing](CONTRIBUTING.md).
-
-See the [installation and publishing guide](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/installation.md) for Composer setup, configuration, migration ownership, and agent skills.
-
-## Quick reference
-
-| Item | Value |
-|---|---|
-| Installed through | `composer require nvl/filterable:^6.0` |
-| Module identifier | `nvl/filterable` |
-| PHP namespace | `Nvl\Filterable` |
-| Service provider | `Nvl\Filterable\Providers\FilterableServiceProvider` |
-| Configuration | None; schemas are declared in application code |
-
-## Purpose
-
-`nvl/filterable` translates explicit typed filter sets into allowlisted Eloquent predicates and sorting on Laravel 12–13 and PHP 8.4+. It is not a facets engine, full-text search engine, authorization layer, or arbitrary query language.
-
-The package depends only on `nvl/core` inside the NVL family. It has no migrations, routes, configuration, or host-model assumptions.
-
-## Requirements and installation
-
-```bash
-composer require nvl/filterable:^6.0
 php artisan vendor:publish --tag=nvl-filterable-translations
 php artisan vendor:publish --tag=nvl-filterable-skills
+```
+
+Requires PHP 8.4+, Laravel 13 and `nvl/core` for native exception presentation and resource names. The local `^6.0` metadata is provisional during the Light migration. There are no routes, migrations, config files, Data dependencies or frontend transformation runtime.
+
+Authorize a host-owned model query, declare a `FilterSchema`, then inject `Nvl\Filterable\Contracts\EloquentFilterApplierContract`:
+
+```php
+$query = $applier->apply(
+    Article::query()->where('account_id', $accountId),
+    $schema,
+    filters: [['alias' => 'status', 'operator' => 'in', 'value' => ['draft', 'published']]],
+    sorts: [['alias' => 'publishedAt', 'direction' => 'desc']],
+);
+$articles = $query->paginate();
 ```
 
 ## Declare a schema
@@ -109,76 +77,20 @@ $schema = new FilterSchema(
 
 Aliases are the public contract; columns and relation paths remain internal. Duplicate aliases, invalid identifiers or defaults, incompatible operators, undeclared enum values, unsafe sort relations, invalid null operators, and excessive relation depth fail during schema construction.
 
-## Build a transport-neutral filter set
+## Native inputs and consumer transport
 
-Programmatic callers construct `FilterSet`, `FilterCriterion`, and `SortCriterion` directly. HTTP callers use the isolated adapter:
+`apply(Builder $query, FilterSchema $schema, array $filters = [], array $sorts = []): Builder` returns the supplied builder. Both arrays must be lists:
 
-```php
-use Nvl\Filterable\Http\QueryFilterSetFactory;
-use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
+- Filters: `array{alias:string, operator:FilterOperator|string, value?:scalar|array|null}`. Every alias and operator must be declared. Values for `in`, `not_in` and `between` must be lists of native scalars. Other operators require a scalar value. Objects and nested arrays are rejected.
+- Sorts: `array{alias:string, direction:'asc'|'desc'}`. Directions are exact lowercase strings. Every alias must be declared.
 
-$filterSet = app(QueryFilterSetFactory::class)->fromHttpQuery(
-    $request->query(),
-    $schema,
-);
+Unknown keys, malformed entries, missing required values and all complexity bounds fail before the builder is changed. A null-check may omit `value` or supply explicit null; other supplied null values fail the declared type. Empty filters retain caller predicates. Empty sorts use the schema defaults, with its tie-breaker appended once.
 
-$query = app(EloquentFilterApplierContract::class)->apply(
-    Article::query(),
-    $filterSet,
-    $schema,
-);
-
-$articles = $query->paginate();
-```
-
-Expected HTTP shape:
-
-```text
-?filter[status][operator]=in&filter[status][value]=draft,published
-&filter[author][operator]=contains&filter[author][value]=Ada
-&sort=-publishedAt,title
-```
-
-The adapter rejects unknown aliases, malformed filter objects, unsupported operators, invalid sort values, and excessive filter count. It never silently forwards unknown input.
-
-Scalar shorthand always means `equals`:
-
-```text
-?filter[status]=draft
-```
-
-Explicit objects contain exactly `operator` and, except for null checks, `value`. `is_null` and `is_not_null` must omit `value`:
-
-```text
-?filter[publishedAt][operator]=is_null
-```
-
-Use `fromQuery()` outside an HTTP boundary when the caller should receive `FilterableException` directly. `fromHttpQuery()` converts malformed input to Laravel's standard 422 validation response.
+Consumers own HTTP syntax, scalar shorthand, comma splitting, frontend types and validation response mapping. Convert request input into the native lists above, then call the same applier used by jobs and CLI. A controller can catch `FilterableException` and throw `$exception->toValidationException()` after authorization. The package ships no HTTP parser or DTO compatibility aliases.
 
 ## Model trait
 
-A model may use `Filterable` and return an immutable schema:
-
-```php
-use Nvl\Filterable\Data\FilterSet;
-use Nvl\Filterable\Traits\Filterable;
-
-final class Article extends Model
-{
-    use Filterable;
-
-    public function filterSchema(): FilterSchema
-    {
-        return ArticleFilters::schema();
-    }
-}
-
-$articles = Article::query()
-    ->applyFilterSet($filterSet)
-    ->paginate();
-```
-
-The trait accepts a `FilterSet`; it does not inspect the Request facade.
+A host model may use `Nvl\Filterable\Traits\Filterable` and implement `filterSchema(): FilterSchema`. Call `Article::query()->applyFilters($filters, $sorts)` to use the same injected applier contract and validation. The scope never inspects a request.
 
 ## Types and operators
 
@@ -188,11 +100,11 @@ Supported operators are `equals`, `not_equals`, `contains`, `not_contains`, `in`
 
 Boolean parsing accepts only `true`, `false`, `1`, and `0`. Integers use strict base-10 syntax. Decimals reject locale separators and scientific notation and remain strings to avoid binary floating-point surprises. Dates require exact `YYYY-MM-DD` calendar values. Date-times require ISO-8601 instants with an explicit timezone and normalize to UTC database timestamps. Empty strings are rejected. Null operators require `nullable=true`.
 
-`in` and `not_in` accept a list or a comma-separated string and reject empty or oversized sets. `between` requires exactly two values. Custom handlers receive values after the same strict type normalization and own the complete predicate for their alias. Each handler runs inside a nested `where` group, so an ordinary `orWhere` remains inside the alias predicate and cannot broaden predicates already present on the caller's query.
+`in` and `not_in` accept native lists and reject empty or oversized sets. `between` requires exactly two values. Custom handlers receive values after the same strict type normalization and own the complete predicate for their alias. Each handler runs inside a nested `where` group, so an ordinary `orWhere` remains inside the alias predicate and cannot broaden predicates already present on the caller's query.
 
 Handlers are trusted, predicate-only callbacks. Keep them bounded and parameterized, and use them only for `where`, `orWhere`, `whereHas`, or equivalent predicate composition. Prepare joins and selected columns on the caller before filtering, and declare ordering through `SortDefinition`; query-shape mutations inside a nested handler are outside the callback contract. This grouping is a composition safeguard, not an authorization sandbox: a trusted callback can still use raw SQL or otherwise bypass application rules. Authorize the query before exposing results and test every custom handler's boundary.
 
-`SortCriterion` uses the `SortDirection` enum. HTTP sorts use `sort=-publishedAt,title` or an alias-to-direction object. Duplicate and excessive sorts are rejected. When `tieBreakerSort` is declared, its ascending column is appended unless already present, which makes offset and cursor pagination deterministic.
+Sort entries contain exactly `alias` and `direction`, with direction `asc` or `desc`. Duplicate and excessive sorts are rejected. When `tieBreakerSort` is declared, its ascending column is appended unless already present, which makes offset and cursor pagination deterministic.
 
 ## Database portability
 
@@ -200,113 +112,35 @@ Handlers are trusted, predicate-only callbacks. Keep them bounded and parameteri
 
 Never expose raw SQL, arbitrary JSON paths, request-provided relations, or request-provided columns.
 
-## TypeScript
+## Custom handlers
 
-Filter DTOs and enums generate under `Nvl.Filterable.*`:
+A handler receives the nested Eloquent builder and a normalized native criterion:
 
-```bash
-php artisan nvl:data:types:generate
-php artisan nvl:data:types:check
+```php
+handler: static fn (Builder $query, array $criterion): Builder => $query
+    ->where('name', $criterion['value'])
+    ->orWhere('summary', $criterion['value']),
 ```
 
-## Failure behavior
-
-Contract and input violations throw `FilterableException` with stable `errorCode` and `path` context before unsafe identifiers reach Eloquent. Query execution errors remain database exceptions. Controllers should call `fromHttpQuery()` after authorization for Laravel's safe 422 validation response.
-
-## Verification
-
-Tests cover SQL injection payloads, aliases, relations, custom handlers, null and empty input, booleans, decimals, enum sets, ranges, dates and time zones, sorting, complexity limits, and SQLite/PostgreSQL/MySQL parity.
-
-See [UPGRADING.md](UPGRADING.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [CHANGELOG.md](CHANGELOG.md).
-
-## Supported PHP usage
-
-The source `@api` declarations identify supported workflows, extension contracts, and value types. Public members marked `@internal` and untagged implementation types remain package-owned. Concrete Actions retain their existing constructors, qualifiers, and `execute()` signatures.
-
-A package model returned or accepted by a public workflow is an identity/result handle. Use its declared type and `getKey()`, `getKeyName()`, `getMorphClass()`, `getRouteKey()`, `getRouteKeyName()`, `is()`, `isNot()`, and `relationLoaded()`. Read only explicitly declared in-memory `@nvl-consumer-read` fields; ordinary model PHPDocs and fillable attributes do not grant consumer reads. Obtain display projections through public reads. Persistence, additional model queries, relation access/loading, and generic model serialization are outside this contract. Host-model queries remain available, while traversal or aggregates of package capability relations require the package public reader or authorized adapter.
+The criterion has `alias:string`, `operator:FilterOperator` and `value:mixed`, where the value follows the definition (date-time values become UTC `CarbonImmutable` instances). Handlers are trusted predicate-only callbacks. Their grouped predicates preserve the caller's constraints; authorization remains the consumer's responsibility.
 
 ## Testing your app
 
-Inject `EloquentFilterApplierContract` when application services apply a
-`FilterSet`. The native applier and its interface default share the existing
-singleton lifetime. The public `Filterable::scopeApplyFilterSet` adapter also
-resolves this contract, so a host replacement is used by the real model scope.
-`QueryFilterSetFactory`, filter schemas, typed criteria, and immutable values
-remain direct APIs.
-
-For a host-owned `Article` model that uses `Filterable`, a scope substitution test
-can retain its actual Eloquent builder without executing a query:
+Replace `EloquentFilterApplierContract` in Laravel's container for an orchestration test. Early host bindings are retained, and later replacements affect subsequent resolutions and model scope calls.
 
 ```php
-use App\Models\Article;
-use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
-use Nvl\Filterable\Data\FilterSet;
-
-$model = new Article;
-$query = $model->newQuery();
-$filters = FilterSet::none();
+$query = (new Article)->newQuery();
 $applier = Mockery::mock(EloquentFilterApplierContract::class);
 $applier->shouldReceive('apply')->once()
-    ->with($query, $filters, Mockery::type(\Nvl\Filterable\Definitions\FilterSchema::class))
+    ->with($query, Mockery::type(FilterSchema::class), [], [])
     ->andReturn($query);
 $this->app->instance(EloquentFilterApplierContract::class, $applier);
-expect($model->scopeApplyFilterSet($query, $filters))->toBe($query);
+expect((new Article)->scopeApplyFilters($query))->toBe($query);
 ```
 
-Filterable has no package models or factories. Use the host application's model
-factory when persisted host rows are required. Test schema/parser/value behavior
-directly and test the real applier with host-owned database rows to verify
-normalization, authorization predicates, operator semantics, and sorting.
-A substitute is evidence of your orchestration, not filtering correctness.
+Use real host-owned rows for filtering correctness, alias and type rejection, literal wildcards, relations, custom OR predicates, complexity and deterministic pagination. Filterable has no package models or factories. Test database-specific case, collation and timestamp behavior on each supported production driver.
 
-In Laravel application tests, register a native Mockery interface mock or a small
-implementation with `$this->app->instance(Contract::class, $substitute)` before
-resolving your application service. A host binding installed before package
-registration is retained; later contract replacements affect subsequent
-resolutions. Rebuild previously resolved host services after replacing their
-dependencies. Concrete implementations remain callable with their original
-constructors through major 5. Mocks exercise your application orchestration;
-package authorization, persistence, and external effects need real integration
-tests.
-
-The existing model scope now resolves EloquentFilterApplierContract. Its singleton default resolves the native concrete through the supplied container; parsing/schema APIs remain direct.
-
-For static consumer checks, include the shipped
-[`consumer-audit.neon`](https://github.com/nvl-laravel-suite/core/blob/main/support/consumer-audit.neon) from
-`vendor/nvl/core/support/consumer-audit.neon` in your host PHPStan configuration
-and configure explicit `nvlConsumer.testPaths` for factory-backed tests. The
-extension checks supported APIs and model/query boundaries; it does not prove
-authorization or arbitrary dynamic SQL.
-
-## Testing your app
-
-Inject the supported contract rather than constructing its concrete Action or querying package tables. Replace `Nvl\Filterable\Contracts\EloquentFilterApplierContract` in Laravel's native container for a host-workflow test:
-
-```php
-use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
-
-$double = Mockery::mock(EloquentFilterApplierContract::class);
-$this->app->instance(EloquentFilterApplierContract::class, $double);
-// Configure the exact apply arguments and documented return value for your host case.
-```
-
-The package's conditional native binding preserves host substitutions. Production uses the real contract; test doubles do not prove its storage/authorization behavior.
-
-This package has no persistent fixture model in the supported factory inventory. Test value objects and contract inputs directly; do not invent a package model factory.
-
-Use Laravel `Event::fake()`, `Queue::fake()`, `Mail::fake()` or `Storage::fake()` only for the effects the host test intends to isolate. Use real commits/listeners for timing proof. Add the optional Core consumer boundary rules to host PHPStan:
-
-```neon
-includes:
-    - vendor/nvl/core/support/consumer-audit.neon
-parameters:
-    nvlConsumer:
-        testPaths: [tests]
-        tableNames: []
-        exceptions: []
-```
-
-Rules read installed public metadata without suite boot. They flag internal symbols, package model queries/writes, capability relations and owned tables; they cannot prove dynamic code or runtime authorization. Exact exceptions require `file`, `identifier`, `symbol`, and a documented `reason`. The published 5.x family is verified through the local Dagger release gate on PHP 8.4/Laravel 13, including owning suites, MySQL/PostgreSQL persistence contracts and sealed Tenancy consumers. Fresh public Composer installation, discovery and configuration/route caching are verified. PHP 8.5, Laravel 12, MariaDB and the full independent archive matrix require separate evidence. See the [verification and release policy](https://github.com/nvl-laravel-suite/laravel-suite#verification-and-releases).
+Public source declarations carry `@api`; helpers remain internal. Consumer DTOs and TypeScript generation belong to the application. See [UPGRADING.md](UPGRADING.md), [SECURITY.md](SECURITY.md) and [events](docs/events.md).
 
 ## Error codes and events
 

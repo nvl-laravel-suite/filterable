@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace Nvl\Filterable\Services;
 
-use BackedEnum;
 use Carbon\CarbonImmutable;
 use DateTimeImmutable;
-use DateTimeInterface;
-use Nvl\Filterable\Data\FilterCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\FilterValueType;
 use Nvl\Filterable\Exceptions\FilterableException;
-use Stringable;
 use Throwable;
 
 /**
@@ -23,64 +19,157 @@ use Throwable;
 final class FilterCriterionNormalizer
 {
     /**
-     * Normalize one criterion using its immutable schema definition.
+     * Validate the complete filter list before the caller mutates a query.
+     *
+     * @param  array<array-key, mixed>  $filters
+     * @return list<array{alias: string, operator: FilterOperator, value: mixed}>
+     */
+    public function filters(array $filters, FilterSchema $schema): array
+    {
+        if (! array_is_list($filters)) {
+            throw new FilterableException('Filters must be a list.', 'invalid_filter_shape', 'filter');
+        }
+        if (count($filters) > $schema->maximumFilters) {
+            throw new FilterableException('The filter complexity limit was exceeded.', 'filter_complexity_exceeded', 'filter');
+        }
+        $normalized = [];
+        foreach ($filters as $criterion) {
+            if (! is_array($criterion) || ! isset($criterion['alias']) || ! is_string($criterion['alias'])) {
+                throw new FilterableException('Filters require a string alias.', 'invalid_filter_shape', 'filter');
+            }
+            $alias = $criterion['alias'];
+            $definition = $schema->filter($alias);
+            if ($definition === null) {
+                throw new FilterableException("Unknown filter alias [{$alias}].", 'unknown_filter_alias', "filter.{$alias}");
+            }
+            $normalized[] = $this->normalize($criterion, $definition, $schema);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Validate explicit/default sorts and append the declared stable tie-breaker.
+     *
+     * @param  array<array-key, mixed>  $sorts
+     * @return list<array{alias: string, direction: 'asc'|'desc'}>
+     */
+    public function sorts(array $sorts, FilterSchema $schema): array
+    {
+        if (! array_is_list($sorts)) {
+            throw new FilterableException('Sorts must be a list.', 'invalid_sort_shape', 'sort');
+        }
+        if (count($sorts) > $schema->maximumSorts) {
+            throw new FilterableException('The sort complexity limit was exceeded.', 'sort_complexity_exceeded', 'sort');
+        }
+        if ($sorts === []) {
+            $sorts = array_map(static fn (string $sort): array => [
+                'alias' => str_starts_with($sort, '-') ? substr($sort, 1) : $sort,
+                'direction' => str_starts_with($sort, '-') ? 'desc' : 'asc',
+            ], $schema->defaultSorts);
+        }
+        $normalized = [];
+        $aliases = [];
+        foreach ($sorts as $sort) {
+            if (! is_array($sort) || array_diff(array_keys($sort), ['alias', 'direction']) !== []
+                || ! isset($sort['alias']) || ! is_string($sort['alias']) || ! array_key_exists('direction', $sort)) {
+                throw new FilterableException('Sorts require only an alias and direction.', 'invalid_sort_shape', 'sort');
+            }
+            $alias = $sort['alias'];
+            if ($schema->sort($alias) === null) {
+                throw new FilterableException("Unknown sort alias [{$alias}].", 'unknown_sort_alias', 'sort');
+            }
+            if (! in_array($sort['direction'], ['asc', 'desc'], true)) {
+                throw new FilterableException("Sort [{$alias}] direction must be asc or desc.", 'invalid_sort_direction', 'sort');
+            }
+            if (in_array($alias, $aliases, true)) {
+                throw new FilterableException("Duplicate sort [{$alias}] is not allowed.", 'duplicate_sort', 'sort');
+            }
+            $normalized[] = ['alias' => $alias, 'direction' => $sort['direction']];
+            $aliases[] = $alias;
+        }
+        if ($schema->tieBreakerSort !== null && ! in_array($schema->tieBreakerSort, $aliases, true)) {
+            $normalized[] = ['alias' => $schema->tieBreakerSort, 'direction' => 'asc'];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Normalize one native criterion using its immutable schema definition.
+     *
+     * @param  array<array-key, mixed>  $criterion
+     * @return array{alias: string, operator: FilterOperator, value: mixed}
      */
     public function normalize(
-        FilterCriterion $criterion,
+        array $criterion,
         FilterDefinition $definition,
         FilterSchema $schema,
-    ): FilterCriterion {
-        if (in_array($criterion->operator, [FilterOperator::IsNull, FilterOperator::IsNotNull], true)) {
-            if ($criterion->value !== null) {
+    ): array {
+        if (array_diff(array_keys($criterion), ['alias', 'operator', 'value']) !== []
+            || ! isset($criterion['alias']) || ! is_string($criterion['alias'])
+            || ! array_key_exists('operator', $criterion)) {
+            throw new FilterableException('Filters must contain only an alias, operator and required value.', 'invalid_filter_shape', 'filter');
+        }
+        $alias = $criterion['alias'];
+        if ($alias !== $definition->alias) {
+            throw new FilterableException("Unknown filter alias [{$alias}].", 'unknown_filter_alias', "filter.{$alias}");
+        }
+        $rawOperator = $criterion['operator'];
+        $operator = $rawOperator instanceof FilterOperator ? $rawOperator : (is_string($rawOperator) ? FilterOperator::tryFrom($rawOperator) : null);
+        if ($operator === null) {
+            throw new FilterableException("Unsupported filter operator for [{$alias}].", 'unsupported_filter_operator', "filter.{$alias}.operator");
+        }
+        if (! in_array($operator, $definition->operators, true)) {
+            throw new FilterableException("Operator [{$operator->value}] is not allowed for [{$alias}].", 'disallowed_filter_operator', "filter.{$alias}.operator");
+        }
+        if (! array_key_exists('value', $criterion) && ! in_array($operator, [FilterOperator::IsNull, FilterOperator::IsNotNull], true)) {
+            throw new FilterableException("Filter [{$alias}] requires a value.", 'missing_filter_value', "filter.{$alias}.value");
+        }
+        $criterion = ['alias' => $alias, 'operator' => $operator, 'value' => $criterion['value'] ?? null];
+        if (in_array($criterion['operator'], [FilterOperator::IsNull, FilterOperator::IsNotNull], true)) {
+            if ($criterion['value'] !== null) {
                 throw new FilterableException(
-                    "Null-check filter [{$criterion->alias}] must not contain a value.",
+                    "Null-check filter [{$criterion['alias']}] must not contain a value.",
                     'unexpected_filter_value',
-                    "filter.{$criterion->alias}.value",
+                    "filter.{$criterion['alias']}.value",
                 );
             }
 
             return $criterion;
         }
 
-        if (in_array($criterion->operator, [FilterOperator::In, FilterOperator::NotIn], true)) {
-            return new FilterCriterion(
-                $criterion->alias,
-                $criterion->operator,
-                $this->listValues($criterion->value, $definition, $schema),
-            );
+        if (in_array($criterion['operator'], [FilterOperator::In, FilterOperator::NotIn], true)) {
+            return [...$criterion, 'value' => $this->listValues($criterion['value'], $definition, $schema)];
         }
 
-        if ($criterion->operator === FilterOperator::Between) {
-            $values = $this->listValues($criterion->value, $definition, $schema);
+        if ($criterion['operator'] === FilterOperator::Between) {
+            $values = $this->listValues($criterion['value'], $definition, $schema);
 
             if (count($values) !== 2) {
                 throw new FilterableException(
-                    "BETWEEN requires exactly two values for [{$criterion->alias}].",
+                    "BETWEEN requires exactly two values for [{$criterion['alias']}].",
                     'invalid_between_arity',
-                    "filter.{$criterion->alias}.value",
+                    "filter.{$criterion['alias']}.value",
                 );
             }
 
-            return new FilterCriterion($criterion->alias, $criterion->operator, $values);
+            return [...$criterion, 'value' => $values];
         }
 
-        if (is_array($criterion->value)) {
+        if (is_array($criterion['value'])) {
             throw new FilterableException(
-                "Filter [{$criterion->alias}] requires one scalar value.",
+                "Filter [{$criterion['alias']}] requires one scalar value.",
                 'invalid_filter_value_shape',
-                "filter.{$criterion->alias}.value",
+                "filter.{$criterion['alias']}.value",
             );
         }
 
-        return new FilterCriterion(
-            $criterion->alias,
-            $criterion->operator,
-            $this->value($criterion->value, $definition, $schema),
-        );
+        return [...$criterion, 'value' => $this->value($criterion['value'], $definition, $schema)];
     }
 
     /**
-     * Normalize a list or comma-separated string.
+     * Normalize a list.
      *
      * @return list<mixed>
      */
@@ -99,11 +188,9 @@ final class FilterCriterionNormalizer
             }
 
             $values = $value;
-        } elseif (is_string($value)) {
-            $values = explode(',', $value);
         } else {
             throw new FilterableException(
-                "Filter [{$definition->alias}] values must be a list or comma-separated string.",
+                "Filter [{$definition->alias}] values must be a list.",
                 'invalid_filter_value_shape',
                 "filter.{$definition->alias}.value",
             );
@@ -139,8 +226,8 @@ final class FilterCriterionNormalizer
         FilterDefinition $definition,
         FilterSchema $schema,
     ): mixed {
-        if ($value instanceof BackedEnum) {
-            $value = $value->value;
+        if (! is_scalar($value) && $value !== null) {
+            throw new FilterableException('Filter values must be scalars or null.', 'invalid_filter_value_shape', "filter.{$definition->alias}.value");
         }
 
         if (is_string($value) && strlen($value) > $schema->maximumStringLength) {
@@ -245,7 +332,7 @@ final class FilterCriterionNormalizer
      */
     private function string(mixed $value): string
     {
-        if (! is_string($value) && ! $value instanceof Stringable) {
+        if (! is_string($value)) {
             throw new FilterableException(
                 'String filter value is invalid.',
                 'invalid_string_filter_value',
@@ -287,10 +374,6 @@ final class FilterCriterionNormalizer
      */
     private function date(mixed $value): string
     {
-        if ($value instanceof DateTimeInterface) {
-            return $value->format('Y-m-d');
-        }
-
         if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
             throw new FilterableException(
                 'Date filter value must use YYYY-MM-DD.',
@@ -320,10 +403,6 @@ final class FilterCriterionNormalizer
      */
     private function dateTime(mixed $value): CarbonImmutable
     {
-        if ($value instanceof DateTimeInterface) {
-            return CarbonImmutable::instance($value)->utc();
-        }
-
         if (! is_string($value) || ! preg_match(
             '/^(?<date>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(?<fraction>\d{1,6}))?(?<zone>Z|[+-]\d{2}:\d{2})$/',
             $value,

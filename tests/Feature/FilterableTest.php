@@ -5,9 +5,6 @@ declare(strict_types=1);
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
-use Nvl\Filterable\Data\FilterCriterion;
-use Nvl\Filterable\Data\FilterSet;
-use Nvl\Filterable\Data\SortCriterion;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Definitions\SortDefinition;
@@ -15,8 +12,8 @@ use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\FilterValueType;
 use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
-use Nvl\Filterable\Http\QueryFilterSetFactory;
 use Nvl\Filterable\Services\EloquentFilterApplier;
+use Nvl\Filterable\Tests\Fixtures\ConsumerQueryFilters;
 use Nvl\Filterable\Tests\Fixtures\FilterableGroup;
 use Nvl\Filterable\Tests\Fixtures\FilterableRecord;
 
@@ -93,16 +90,13 @@ afterEach(function (): void {
 });
 
 it('applies typed allowlisted filters and enum-backed sorts', function (): void {
-    $set = new FilterSet(
-        filters: [
-            new FilterCriterion('status', FilterOperator::Equals, 'active'),
-            new FilterCriterion('price', FilterOperator::Gte, '15'),
-        ],
-        sorts: [new SortCriterion('price', SortDirection::Desc)],
-    );
+    $set = ['filters' => [
+        ['alias' => 'status', 'operator' => FilterOperator::Equals, 'value' => 'active'],
+        ['alias' => 'price', 'operator' => FilterOperator::Gte, 'value' => '15'],
+    ], 'sorts' => [['alias' => 'price', 'direction' => SortDirection::Desc->value]]];
 
     $names = FilterableRecord::query()
-        ->applyFilterSet($set)
+        ->applyFilters($set['filters'], $set['sorts'])
         ->pluck('name')
         ->all();
 
@@ -111,24 +105,24 @@ it('applies typed allowlisted filters and enum-backed sorts', function (): void 
 
 it('applies explicit negative equality and set operators', function (): void {
     $notDraft = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('status', FilterOperator::Equals, 'active'),
-            new FilterCriterion('price', FilterOperator::NotIn, ['10', '20']),
-        ]))
+        ->applyFilters([
+            ['alias' => 'status', 'operator' => FilterOperator::Equals, 'value' => 'active'],
+            ['alias' => 'price', 'operator' => FilterOperator::NotIn, 'value' => ['10', '20']],
+        ])
         ->pluck('name')
         ->all();
 
     $notAlpha = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('name', FilterOperator::NotEquals, 'Alpha'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'name', 'operator' => FilterOperator::NotEquals, 'value' => 'Alpha'],
+        ])
         ->pluck('name')
         ->all();
 
     $included = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('price', FilterOperator::In, '10,30'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'price', 'operator' => FilterOperator::In, 'value' => ['10', '30']],
+        ])
         ->pluck('name')
         ->all();
 
@@ -139,23 +133,23 @@ it('applies explicit negative equality and set operators', function (): void {
 
 it('treats contains wildcards as literal characters', function (): void {
     $percent = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('note', FilterOperator::Contains, '%'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'note', 'operator' => FilterOperator::Contains, 'value' => '%'],
+        ])
         ->pluck('name')
         ->all();
 
     $underscore = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('note', FilterOperator::Contains, '_'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'note', 'operator' => FilterOperator::Contains, 'value' => '_'],
+        ])
         ->pluck('name')
         ->all();
 
     $notPercent = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('name', FilterOperator::NotContains, 'Alpha'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'name', 'operator' => FilterOperator::NotContains, 'value' => 'Alpha'],
+        ])
         ->pluck('name')
         ->all();
 
@@ -166,23 +160,23 @@ it('treats contains wildcards as literal characters', function (): void {
 
 it('normalizes strict scalar values before applying queries and custom handlers', function (): void {
     $booleans = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('active', FilterOperator::Equals, 'false'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'active', 'operator' => FilterOperator::Equals, 'value' => 'false'],
+        ])
         ->pluck('name')
         ->all();
 
     $custom = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('active_handler', FilterOperator::Equals, '1'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'active_handler', 'operator' => FilterOperator::Equals, 'value' => '1'],
+        ])
         ->pluck('name')
         ->all();
 
     $decimal = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('amount', FilterOperator::Gte, '20.00'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'amount', 'operator' => FilterOperator::Gte, 'value' => '20.00'],
+        ])
         ->pluck('name')
         ->all();
 
@@ -196,9 +190,9 @@ it('rejects permissive boolean, numeric, empty, and oversized values', function 
     mixed $value,
     string $message,
 ): void {
-    expect(fn () => FilterableRecord::query()->applyFilterSet(new FilterSet([
-        new FilterCriterion($alias, FilterOperator::Equals, $value),
-    ]))->get())->toThrow(FilterableException::class, $message);
+    expect(fn () => FilterableRecord::query()->applyFilters([
+        ['alias' => $alias, 'operator' => FilterOperator::Equals, 'value' => $value],
+    ])->get())->toThrow(FilterableException::class, $message);
 })->with([
     'boolean word' => ['active', 'off', 'Boolean filters accept only'],
     'boolean null' => ['active', null, 'Boolean filters accept only'],
@@ -210,16 +204,16 @@ it('rejects permissive boolean, numeric, empty, and oversized values', function 
 
 it('normalizes exact dates, ranges, and timezone-aware instants', function (): void {
     $range = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('created', FilterOperator::Between, ['2026-01-02', '2026-01-03']),
-        ]))
+        ->applyFilters([
+            ['alias' => 'created', 'operator' => FilterOperator::Between, 'value' => ['2026-01-02', '2026-01-03']],
+        ])
         ->pluck('name')
         ->all();
 
     $instant = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('occurred', FilterOperator::Equals, '2026-01-01T12:00:00+02:00'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'occurred', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01T12:00:00+02:00'],
+        ])
         ->pluck('name')
         ->all();
 
@@ -233,9 +227,9 @@ it('rejects relative, rollover, timezone-less, and malformed ranges', function (
     mixed $value,
     string $message,
 ): void {
-    expect(fn () => FilterableRecord::query()->applyFilterSet(new FilterSet([
-        new FilterCriterion($alias, $operator, $value),
-    ]))->get())->toThrow(FilterableException::class, $message);
+    expect(fn () => FilterableRecord::query()->applyFilters([
+        ['alias' => $alias, 'operator' => $operator, 'value' => $value],
+    ])->get())->toThrow(FilterableException::class, $message);
 })->with([
     'relative date' => ['created', FilterOperator::Equals, 'tomorrow', 'must use YYYY-MM-DD'],
     'rollover date' => ['created', FilterOperator::Equals, '2026-02-30', 'valid calendar date'],
@@ -247,24 +241,24 @@ it('rejects relative, rollover, timezone-less, and malformed ranges', function (
 
 it('applies null checks without accepting dummy values', function (): void {
     $null = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('note', FilterOperator::IsNull),
-        ]))
+        ->applyFilters([
+            ['alias' => 'note', 'operator' => FilterOperator::IsNull, 'value' => null],
+        ])
         ->pluck('name')
         ->all();
 
     $notNull = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('note', FilterOperator::IsNotNull),
-        ]))
+        ->applyFilters([
+            ['alias' => 'note', 'operator' => FilterOperator::IsNotNull, 'value' => null],
+        ])
         ->pluck('name')
         ->all();
 
     expect($null)->toBe(['Beta'])
         ->and($notNull)->toBe(['Alpha', 'Gamma'])
-        ->and(fn () => FilterableRecord::query()->applyFilterSet(new FilterSet([
-            new FilterCriterion('note', FilterOperator::IsNull, 'ignored'),
-        ]))->get())->toThrow(FilterableException::class, 'must not contain a value');
+        ->and(fn () => FilterableRecord::query()->applyFilters([
+            ['alias' => 'note', 'operator' => FilterOperator::IsNull, 'value' => 'ignored'],
+        ])->get())->toThrow(FilterableException::class, 'must not contain a value');
 });
 
 it('applies comparison operator aliases', function (
@@ -273,9 +267,9 @@ it('applies comparison operator aliases', function (
     array $expected,
 ): void {
     $names = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('price', $operator, $value),
-        ]))
+        ->applyFilters([
+            ['alias' => 'price', 'operator' => $operator, 'value' => $value],
+        ])
         ->pluck('name')
         ->all();
 
@@ -288,9 +282,9 @@ it('applies comparison operator aliases', function (
 
 it('applies allowlisted nested relation filters', function (): void {
     $names = FilterableRecord::query()
-        ->applyFilterSet(new FilterSet([
-            new FilterCriterion('group', FilterOperator::Contains, 'ditor'),
-        ]))
+        ->applyFilters([
+            ['alias' => 'group', 'operator' => FilterOperator::Contains, 'value' => 'ditor'],
+        ])
         ->pluck('name')
         ->all();
 
@@ -298,17 +292,17 @@ it('applies allowlisted nested relation filters', function (): void {
 });
 
 it('fails closed for unknown aliases and unsupported operators', function (): void {
-    expect(fn () => FilterableRecord::query()->applyFilterSet(new FilterSet([
-        new FilterCriterion('private_column', FilterOperator::Equals, 'secret'),
-    ]))->get())->toThrow(FilterableException::class, 'Unknown filter alias');
+    expect(fn () => FilterableRecord::query()->applyFilters([
+        ['alias' => 'private_column', 'operator' => FilterOperator::Equals, 'value' => 'secret'],
+    ])->get())->toThrow(FilterableException::class, 'Unknown filter alias');
 
-    expect(fn () => FilterableRecord::query()->applyFilterSet(new FilterSet([
-        new FilterCriterion('status', FilterOperator::Contains, 'active'),
-    ]))->get())->toThrow(FilterableException::class, 'is not allowed');
+    expect(fn () => FilterableRecord::query()->applyFilters([
+        ['alias' => 'status', 'operator' => FilterOperator::Contains, 'value' => 'active'],
+    ])->get())->toThrow(FilterableException::class, 'is not allowed');
 });
 
 it('parses scalar shorthand, exact filter objects, null operators, and sort syntax', function (): void {
-    $factory = app(QueryFilterSetFactory::class);
+    $factory = app(ConsumerQueryFilters::class);
     $schema = (new FilterableRecord)->filterSchema();
     $set = $factory->fromQuery([
         'filter' => [
@@ -319,19 +313,19 @@ it('parses scalar shorthand, exact filter objects, null operators, and sort synt
         'sort' => '-price,name',
     ], $schema);
 
-    expect($set->filters)->toHaveCount(3)
-        ->and($set->filters[0]->operator)->toBe(FilterOperator::Equals)
-        ->and($set->filters[2]->operator)->toBe(FilterOperator::IsNull)
-        ->and($set->filters[2]->value)->toBeNull()
-        ->and($set->sorts[0]->direction)->toBe(SortDirection::Desc)
-        ->and($set->sorts[1]->direction)->toBe(SortDirection::Asc);
+    expect($set['filters'])->toHaveCount(3)
+        ->and($set['filters'][0]['operator'])->toBe(FilterOperator::Equals)
+        ->and($set['filters'][2]['operator'])->toBe(FilterOperator::IsNull)
+        ->and($set['filters'][2]['value'])->toBeNull()
+        ->and($set['sorts'][0]['direction'])->toBe('desc')
+        ->and($set['sorts'][1]['direction'])->toBe('asc');
 });
 
 it('rejects malformed filter objects at the adapter boundary', function (
     array $payload,
     string $message,
 ): void {
-    $factory = app(QueryFilterSetFactory::class);
+    $factory = app(ConsumerQueryFilters::class);
     $schema = (new FilterableRecord)->filterSchema();
 
     expect(fn () => $factory->fromQuery(['filter' => ['note' => $payload]], $schema))
@@ -344,7 +338,7 @@ it('rejects malformed filter objects at the adapter boundary', function (
 ]);
 
 it('rejects unknown or disallowed HTTP operators before query application', function (): void {
-    $factory = app(QueryFilterSetFactory::class);
+    $factory = app(ConsumerQueryFilters::class);
     $schema = (new FilterableRecord)->filterSchema();
 
     expect(fn () => $factory->fromQuery([
@@ -360,7 +354,7 @@ it('maps malformed HTTP filters and values to Laravel validation exceptions', fu
     array $query,
     string $path,
 ): void {
-    $factory = app(QueryFilterSetFactory::class);
+    $factory = app(ConsumerQueryFilters::class);
     $schema = (new FilterableRecord)->filterSchema();
 
     try {
@@ -385,7 +379,7 @@ it('maps malformed HTTP filters and values to Laravel validation exceptions', fu
 ]);
 
 it('enforces filter, sort, list-value, and string complexity limits', function (): void {
-    $factory = app(QueryFilterSetFactory::class);
+    $factory = app(ConsumerQueryFilters::class);
     $applier = app(EloquentFilterApplier::class);
     $schema = new FilterSchema(
         filters: [
@@ -410,35 +404,35 @@ it('enforces filter, sort, list-value, and string complexity limits', function (
         'sort' => 'name,id',
     ], $schema))->toThrow(FilterableException::class, 'sort complexity');
 
-    expect(fn () => $applier->apply(FilterableRecord::query(), new FilterSet([
-        new FilterCriterion('name', FilterOperator::In, ['a', 'b', 'c']),
-    ]), $schema)->get())->toThrow(FilterableException::class, 'value complexity');
+    expect(fn () => $applier->apply(FilterableRecord::query(), $schema, [
+        ['alias' => 'name', 'operator' => FilterOperator::In, 'value' => ['a', 'b', 'c']],
+    ], [])->get())->toThrow(FilterableException::class, 'value complexity');
 
-    expect(fn () => $applier->apply(FilterableRecord::query(), new FilterSet([
-        new FilterCriterion('name', FilterOperator::Equals, 'abcde'),
-    ]), $schema)->get())->toThrow(FilterableException::class, 'maximum string length');
+    expect(fn () => $applier->apply(FilterableRecord::query(), $schema, [
+        ['alias' => 'name', 'operator' => FilterOperator::Equals, 'value' => 'abcde'],
+    ], [])->get())->toThrow(FilterableException::class, 'maximum string length');
 });
 
 it('rejects duplicate HTTP and programmatic sorts', function (): void {
-    $factory = app(QueryFilterSetFactory::class);
+    $factory = app(ConsumerQueryFilters::class);
     $schema = (new FilterableRecord)->filterSchema();
 
     expect(fn () => $factory->fromQuery(['sort' => 'name,-name'], $schema))
         ->toThrow(FilterableException::class, 'Duplicate sort');
 
-    expect(fn () => FilterableRecord::query()->applyFilterSet(new FilterSet(
+    expect(fn () => FilterableRecord::query()->applyFilters(
         sorts: [
-            new SortCriterion('name'),
-            new SortCriterion('name', SortDirection::Desc),
+            ['alias' => 'name', 'direction' => 'asc'],
+            ['alias' => 'name', 'direction' => SortDirection::Desc->value],
         ],
-    ))->get())->toThrow(FilterableException::class, 'Duplicate sort');
+    )->get())->toThrow(FilterableException::class, 'Duplicate sort');
 });
 
 it('appends a stable tie-breaker to default and explicit sorts', function (): void {
-    $defaultQuery = FilterableRecord::query()->applyFilterSet(FilterSet::none());
-    $explicitQuery = FilterableRecord::query()->applyFilterSet(new FilterSet(
-        sorts: [new SortCriterion('price', SortDirection::Desc)],
-    ));
+    $defaultQuery = FilterableRecord::query()->applyFilters([]);
+    $explicitQuery = FilterableRecord::query()->applyFilters(
+        sorts: [['alias' => 'price', 'direction' => SortDirection::Desc->value]],
+    );
 
     expect($defaultQuery->getQuery()->orders)->toBe([
         ['column' => 'name', 'direction' => 'asc'],
@@ -516,3 +510,78 @@ it('exposes stable machine-readable exception context', function (): void {
     expect($exception->errorCode)->toBe('invalid_example')
         ->and($exception->path)->toBe('filter.example.value');
 });
+
+it('applies native filter and sort arrays directly', function (): void {
+    $query = FilterableRecord::query();
+    $result = app(EloquentFilterApplier::class)->apply($query, (new FilterableRecord)->filterSchema(), [['alias' => 'price', 'operator' => 'gte', 'value' => '20']], [['alias' => 'price', 'direction' => 'desc']]);
+
+    expect($result)->toBe($query)
+        ->and($result->pluck('name')->all())->toBe(['Gamma', 'Beta']);
+});
+
+it('rejects malicious native shapes before mutating the query', function (array $filters, array $sorts): void {
+    $query = FilterableRecord::query()->where('group_id', 1);
+    $sql = $query->toSql();
+    $bindings = $query->getBindings();
+
+    expect(fn () => app(EloquentFilterApplier::class)->apply($query, (new FilterableRecord)->filterSchema(), $filters, $sorts))
+        ->toThrow(FilterableException::class);
+    expect($query->toSql())->toBe($sql)
+        ->and($query->getBindings())->toBe($bindings);
+})->with([
+    'associative filters' => [['name' => ['operator' => 'equals', 'value' => 'Alpha']], []],
+    'scalar entry' => [['Alpha'], []],
+    'unknown key' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'Alpha', 'column' => 'password']], []],
+    'OR key' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'Alpha', 'boolean' => 'or']], []],
+    'missing alias' => [[['operator' => 'equals', 'value' => 'Alpha']], []],
+    'missing operator' => [[['alias' => 'name', 'value' => 'Alpha']], []],
+    'missing value' => [[['alias' => 'name', 'operator' => 'equals']], []],
+    'object value' => [[['alias' => 'name', 'operator' => 'equals', 'value' => new stdClass]], []],
+    'nested value' => [[['alias' => 'name', 'operator' => 'in', 'value' => [['secret']]]], []],
+    'unknown relation' => [[['alias' => 'group.password', 'operator' => 'equals', 'value' => 'x']], []],
+    'unknown operator' => [[['alias' => 'name', 'operator' => 'drop', 'value' => 'x']], []],
+    'late invalid filter' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'Alpha'], ['alias' => 'private', 'operator' => 'equals', 'value' => 'x']], []],
+    'associative sorts' => [[], ['name' => 'asc']],
+    'sort unknown key' => [[], [['alias' => 'name', 'direction' => 'asc', 'column' => 'password']]],
+    'sort missing direction' => [[], [['alias' => 'name']]],
+    'sort invalid direction' => [[], [['alias' => 'name', 'direction' => 'ASC']]],
+    'late invalid sort' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'Alpha']], [['alias' => 'private', 'direction' => 'asc']]],
+]);
+
+it('applies native null omission and explicit null with one declared tie-breaker', function (): void {
+    $applier = app(EloquentFilterApplier::class);
+    $schema = (new FilterableRecord)->filterSchema();
+    foreach ([['alias' => 'note', 'operator' => 'is_null'], ['alias' => 'note', 'operator' => FilterOperator::IsNull, 'value' => null]] as $filter) {
+        expect($applier->apply(FilterableRecord::query(), $schema, [$filter])->pluck('name')->all())->toBe(['Beta']);
+    }
+
+    $query = $applier->apply(FilterableRecord::query(), $schema, sorts: [['alias' => 'id', 'direction' => 'desc']]);
+    expect($query->getQuery()->orders)->toBe([['column' => 'id', 'direction' => 'desc']])
+        ->and($query->pluck('id')->all())->toBe([3, 2, 1]);
+});
+
+it('enforces every native query complexity budget before mutation', function (array $filters, array $sorts, string $code): void {
+    $schema = new FilterSchema(
+        filters: [new FilterDefinition('name', 'name', operators: [FilterOperator::Equals, FilterOperator::In])],
+        sorts: [new SortDefinition('id', 'id'), new SortDefinition('name', 'name')],
+        maximumFilters: 1,
+        maximumSorts: 1,
+        maximumValuesPerFilter: 1,
+        maximumStringLength: 4,
+    );
+    $query = FilterableRecord::query()->where('group_id', 1);
+    $sql = $query->toSql();
+    try {
+        app(EloquentFilterApplier::class)->apply($query, $schema, $filters, $sorts);
+        $this->fail('The native complexity limit was bypassed.');
+    } catch (FilterableException $exception) {
+        expect($exception->errorCode)->toBe($code)
+            ->and($query->toSql())->toBe($sql)
+            ->and($query->getBindings())->toBe([1]);
+    }
+})->with([
+    'filters' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'a'], ['alias' => 'name', 'operator' => 'equals', 'value' => 'b']], [], 'filter_complexity_exceeded'],
+    'sorts' => [[], [['alias' => 'id', 'direction' => 'asc'], ['alias' => 'name', 'direction' => 'asc']], 'sort_complexity_exceeded'],
+    'values' => [[['alias' => 'name', 'operator' => 'in', 'value' => ['a', 'b']]], [], 'filter_value_complexity_exceeded'],
+    'strings' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'abcde']], [], 'filter_string_too_long'],
+]);

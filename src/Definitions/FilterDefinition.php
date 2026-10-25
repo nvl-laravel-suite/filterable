@@ -33,7 +33,7 @@ final readonly class FilterDefinition
      * @param  non-empty-string  $column
      * @param  array<array-key, mixed>  $operators
      * @param  array<array-key, mixed>  $enumValues
-     * @param  (Closure(\Illuminate\Database\Eloquent\Builder<*>, \Nvl\Filterable\Data\FilterCriterion): \Illuminate\Database\Eloquent\Builder<*>)|null  $handler
+     * @param  (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias:string,operator:FilterOperator,value:mixed}): \Illuminate\Database\Eloquent\Builder<*>)|null  $handler
      */
     public function __construct(
         public string $alias,
