@@ -6,7 +6,9 @@ namespace Nvl\Filterable\Enums;
 
 use Nvl\Support\Contracts\ResponseCode;
 
-/** Stable public response codes for Filterable.
+/**
+ * Stable public response codes for Filterable.
+ *
  * @api
  */
 enum FilterableResponseCode: string implements ResponseCode

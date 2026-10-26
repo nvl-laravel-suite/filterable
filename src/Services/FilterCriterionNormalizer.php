@@ -15,6 +15,8 @@ use Throwable;
 
 /**
  * Normalizes untrusted criterion values before query or custom-handler use.
+ *
+ * @internal
  */
 final class FilterCriterionNormalizer
 {
