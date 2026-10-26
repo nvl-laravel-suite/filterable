@@ -10,12 +10,15 @@ use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Support\Globals\GlobalNames;
+use Nvl\Support\Traits\RegistersNamespacedResources;
 
 /**
  * Registers native filtering services and publishable resources.
  */
 final class FilterableServiceProvider extends ServiceProvider
 {
+    use RegistersNamespacedResources;
+
     /**
      * Register stateless filter services.
      */
