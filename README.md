@@ -3,12 +3,12 @@
 ## Quickstart
 
 ```sh
-composer require nvl/filterable:^6.0
+composer require nvl/filterable:^7.0
 php artisan vendor:publish --tag=nvl-filterable-translations
 php artisan vendor:publish --tag=nvl-filterable-skills
 ```
 
-Requires PHP 8.4+, Laravel 13 and `nvl/core` for native exception presentation and resource names. The local `^6.0` metadata is provisional during the Light migration. There are no routes, migrations, config files, Data dependencies or frontend transformation runtime.
+Requires PHP 8.4+, Laravel 13 and `nvl/core:^7.0` for native exception presentation and resource names. There are no routes, migrations, config files, Data dependencies or frontend transformation runtime.
 
 Authorize a host-owned model query, declare a `FilterSchema`, then inject `Nvl\Filterable\Contracts\EloquentFilterApplierContract`:
 
