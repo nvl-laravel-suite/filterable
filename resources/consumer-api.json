@@ -204,8 +204,14 @@
             "methods": [
                 "__construct",
                 "because",
+                "package",
+                "publicContext",
                 "responseCode",
-                "toValidationException"
+                "responseHeaders",
+                "suggestedStatus",
+                "toValidationException",
+                "translationKey",
+                "translationParameters"
             ],
             "properties": [
                 "errorCode",
@@ -233,8 +239,5 @@
             "properties": [],
             "constants": []
         }
-    },
-    "models": {},
-    "capability_relations": {},
-    "tables": {}
+    }
 }
