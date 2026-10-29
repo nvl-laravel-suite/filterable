@@ -291,7 +291,7 @@ final class FilterCriterionNormalizer
     {
         if (
             (! is_int($value) && ! is_string($value))
-            || (is_string($value) && ! preg_match('/^-?(?:0|[1-9][0-9]*)$/', $value))
+            || (is_string($value) && ! preg_match('/^-?(?:0|[1-9][0-9]*)$/D', $value))
         ) {
             throw new FilterableException(
                 'Integer filter value is invalid.',
@@ -318,7 +318,7 @@ final class FilterCriterionNormalizer
     {
         if (
             (! is_int($value) && ! is_float($value) && ! is_string($value))
-            || ! preg_match('/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/', (string) $value)
+            || ! preg_match('/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/D', (string) $value)
         ) {
             throw new FilterableException(
                 'Decimal filter value is invalid.',
@@ -376,7 +376,7 @@ final class FilterCriterionNormalizer
      */
     private function date(mixed $value): string
     {
-        if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value)) {
             throw new FilterableException(
                 'Date filter value must use YYYY-MM-DD.',
                 'invalid_date_filter_value',
@@ -406,7 +406,7 @@ final class FilterCriterionNormalizer
     private function dateTime(mixed $value): CarbonImmutable
     {
         if (! is_string($value) || ! preg_match(
-            '/^(?<date>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(?<fraction>\d{1,6}))?(?<zone>Z|[+-]\d{2}:\d{2})$/',
+            '/^(?<date>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(?<fraction>\d{1,6}))?(?<zone>Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/D',
             $value,
             $matches,
         )) {

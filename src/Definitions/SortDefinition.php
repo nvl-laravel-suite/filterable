@@ -23,7 +23,7 @@ final readonly class SortDefinition
         public string $alias,
         public string $column,
     ) {
-        if (! preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/', $alias)) {
+        if (! preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/D', $alias)) {
             throw new FilterableException(
                 "Sort alias [{$alias}] is invalid.",
                 'invalid_sort_alias',
@@ -31,7 +31,7 @@ final readonly class SortDefinition
             );
         }
 
-        if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $column)) {
+        if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', $column)) {
             throw new FilterableException(
                 "Sort [{$alias}] has an invalid column.",
                 'invalid_sort_column',

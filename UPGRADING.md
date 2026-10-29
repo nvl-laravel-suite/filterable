@@ -2,7 +2,7 @@
 
 ## Native Light API
 
-The package targets PHP 8.4 and Laravel 13. Local family `^6.0` metadata remains provisional until the coordinated release cutover.
+The package targets PHP 8.4, Laravel 13 and the coordinated NVL 7.x family. Upgrade the selected dependency closure together.
 
 Replace `apply($query, $filterSet, $schema)` with `apply($query, $schema, $filters, $sorts)`. Replace `applyFilterSet($set)` with `applyFilters($filters, $sorts)`. `FilterSet`, `FilterCriterion`, `SortCriterion` and `QueryFilterSetFactory` are retired without compatibility aliases. Remove package Data and TypeScript boot/generation assumptions.
 

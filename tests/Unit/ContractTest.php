@@ -12,6 +12,31 @@ use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Filterable\Tests\Fixtures\ConsumerQueryFilters;
 
+it('rejects invalid offsets and trailing input rather than normalizing another filter value', function (FilterValueType $type, string $value): void {
+    $definition = new FilterDefinition('value', 'value', $type);
+    $schema = new FilterSchema([$definition], []);
+    expect(fn () => (new FilterCriterionNormalizer)->filters([
+        ['alias' => 'value', 'operator' => FilterOperator::Equals, 'value' => $value],
+    ], $schema))->toThrow(FilterableException::class);
+})->with([
+    'offset hour overflow' => [FilterValueType::DateTime, '2026-01-01T12:00:00+24:00'],
+    'offset minute overflow' => [FilterValueType::DateTime, '2026-01-01T12:00:00+01:60'],
+    'negative offset overflow' => [FilterValueType::DateTime, '2026-01-01T12:00:00-99:99'],
+    'instant trailing newline' => [FilterValueType::DateTime, "2026-01-01T12:00:00Z\n"],
+    'integer trailing newline' => [FilterValueType::Integer, "12\n"],
+    'decimal trailing newline' => [FilterValueType::Decimal, "12.5\n"],
+]);
+
+it('rejects trailing newlines in declared aliases and database paths', function (Closure $definition): void {
+    expect($definition)->toThrow(FilterableException::class);
+})->with([
+    'filter alias' => [fn () => new FilterDefinition("name\n", 'name')],
+    'filter column' => [fn () => new FilterDefinition('name', "name\n")],
+    'filter relation column' => [fn () => new FilterDefinition('name', "group.name\n")],
+    'sort alias' => [fn () => new SortDefinition("name\n", 'name')],
+    'sort column' => [fn () => new SortDefinition('name', "name\n")],
+]);
+
 it('rejects malformed filter definitions', function (Closure $definition, string $message): void {
     expect($definition)->toThrow(FilterableException::class, $message);
 })->with([

@@ -96,6 +96,8 @@ A host model may use `Nvl\Filterable\Traits\Filterable` and implement `filterSch
 
 Supported value types are boolean, integer, decimal, string, enum, date, and date-time. Set and range behavior comes from `in`, `not_in`, and `between`.
 
+Numeric strings, date-times, aliases and database paths must match their complete declared syntax; trailing newlines are rejected. Date-time timezone offsets require valid hours (`00`–`23`) and minutes (`00`–`59`) before conversion to UTC.
+
 Supported operators are `equals`, `not_equals`, `contains`, `not_contains`, `in`, `not_in`, `between`, `before`, `after`, `gt`, `lt`, `gte`, `lte`, `is_null`, and `is_not_null`. A definition must explicitly allow each operator, and schema construction rejects operators that do not apply to the definition's value type.
 
 Boolean parsing accepts only `true`, `false`, `1`, and `0`. Integers use strict base-10 syntax. Decimals reject locale separators and scientific notation and remain strings to avoid binary floating-point surprises. Dates require exact `YYYY-MM-DD` calendar values. Date-times require ISO-8601 instants with an explicit timezone and normalize to UTC database timestamps. Empty strings are rejected. Null operators require `nullable=true`.

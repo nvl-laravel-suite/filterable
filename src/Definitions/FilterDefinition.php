@@ -44,7 +44,7 @@ final readonly class FilterDefinition
         array $enumValues = [],
         public ?Closure $handler = null,
     ) {
-        if (! preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/', $alias)) {
+        if (! preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/D', $alias)) {
             throw new FilterableException(
                 "Filter alias [{$alias}] is invalid.",
                 'invalid_filter_alias',
@@ -53,7 +53,7 @@ final readonly class FilterDefinition
         }
 
         if (! preg_match(
-            '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,2}$/',
+            '/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,2}$/D',
             $column,
         )) {
             throw new FilterableException(

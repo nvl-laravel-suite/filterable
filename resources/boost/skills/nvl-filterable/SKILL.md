@@ -14,6 +14,8 @@ Call `EloquentFilterApplierContract::apply($query, $schema, $filters = [], $sort
 
 The applier validates all entries before changing the builder. Unknown keys, unsupported aliases/operators, malformed values, duplicates and excess complexity fail closed. Empty sorts select schema defaults and append the tie-breaker once. Contains values are literal substrings with escaped wildcards.
 
+Numeric strings, date-time instants, aliases and database paths reject trailing newlines. Date-time offsets must have valid hours and minutes before UTC normalization; PHP's permissive offset parser is not the input contract.
+
 Consumers own HTTP parsing, comma splitting, scalar shorthand, DTOs, frontend types and response mapping. Package Data carriers and the HTTP factory are retired without aliases. Catch `FilterableException` in a controller and use `toValidationException()` where a 422 response is desired. Direct CLI/job calls receive the same validation guarantees.
 
 Custom handlers receive a nested Eloquent builder and normalized `array{alias:string,operator:FilterOperator,value:mixed}`; date-times normalize to UTC CarbonImmutable. Handlers mutate predicates only and execute inside grouped where clauses, preserving caller predicates when ordinary orWhere is used. They are trusted callbacks, so authorize independently and keep SQL parameterized.
