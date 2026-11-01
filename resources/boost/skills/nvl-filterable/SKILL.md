@@ -1,25 +1,70 @@
 ---
 name: nvl-filterable
-description: Implement, integrate, test, or review native nvl/filterable in Laravel 13. Use for allowlisted Eloquent filters, scalar and list normalization, safe relation predicates, sort aliases and query complexity.
+description: Use when adding allowlisted Eloquent filtering, relation predicates, typed query normalization, bounded sorting or model filter schemas in Laravel.
 ---
 
 # NVL Filterable
 
-Use `FilterSchema`, `FilterDefinition` and `SortDefinition` to allowlist every alias, database path, type, operator, enum value and null behavior. Declare bounded filter/sort/value/string limits, defaults and a stable tie-breaker. Never accept caller-provided columns, relations or SQL fragments.
+Filterable applies a declared query schema to an existing Eloquent builder.
+The host owns authorization, ownership predicates, HTTP parsing and pagination.
+It exposes no HTTP endpoint, database model, migration or configuration file.
 
-Call `EloquentFilterApplierContract::apply($query, $schema, $filters = [], $sorts = [])`, or a host model's `applyFilters($filters, $sorts)` scope. Both arrays are lists:
+## References
 
-- Filters: `array{alias:string,operator:FilterOperator|string,value?:scalar|array|null}`. Sets/ranges require native scalar lists. Other values must match the declared type. Null checks allow omission or explicit null.
-- Sorts: `array{alias:string,direction:'asc'|'desc'}`. Exact lowercase direction and declared aliases are required.
+- [Installation](references/installation.md): requirements, discovery and actual publication tags.
+- [API](references/api.md): definitions, enums, applier signatures and error contracts.
+- [Usage](references/usage.md): native schema, model scope, relation/custom predicates and verification.
 
-The applier validates all entries before changing the builder. Unknown keys, unsupported aliases/operators, malformed values, duplicates and excess complexity fail closed. Empty sorts select schema defaults and append the tie-breaker once. Contains values are literal substrings with escaped wildcards.
+Read usage before composing an endpoint and API before selecting operators or limits.
 
-Numeric strings, date-time instants, aliases and database paths reject trailing newlines. Date-time offsets must have valid hours and minutes before UTC normalization; PHP's permissive offset parser is not the input contract.
+## Choose the integration
 
-Consumers own HTTP parsing, comma splitting, scalar shorthand, DTOs, frontend types and response mapping. Package Data carriers and the HTTP factory are retired without aliases. Catch `FilterableException` in a controller and use `toValidationException()` where a 422 response is desired. Direct CLI/job calls receive the same validation guarantees.
+Inject `EloquentFilterApplierContract` to apply filters to an already scoped query.
+Use the `Filterable` model trait when a host model should expose `applyFilters`.
+Implement that model's `filterSchema()` using immutable definitions.
+The focused applier contract supports an application substitute; provider registration preserves a host prebinding.
+No model substitution registry is needed: the host owns the queried model.
 
-Custom handlers receive a nested Eloquent builder and normalized `array{alias:string,operator:FilterOperator,value:mixed}`; date-times normalize to UTC CarbonImmutable. Handlers mutate predicates only and execute inside grouped where clauses, preserving caller predicates when ordinary orWhere is used. They are trusted callbacks, so authorize independently and keep SQL parameterized.
+## Declare the allowlist
 
-Inject the focused applier contract for host substitution. Native container prebindings remain intact. Use real host-owned rows to test filtering correctness; a mock proves orchestration only. Test malicious shapes/keys, aliases, strict types, null/empty values, lists/ranges, dates/zones, literals, relations, custom OR predicates, limits, duplicate sorts and deterministic pagination. Verify production driver behavior explicitly.
+Use `FilterSchema`, `FilterDefinition` and `SortDefinition`.
+Declare every public alias, database column/relation path, type and operator.
+Only enum definitions accept enum values; declare their complete allowed list.
+Null operators require `nullable: true`.
+Sort definitions use native columns; do not accept caller-provided SQL or relation paths.
+Configure defaults and one declared stable tie-breaker for deterministic pages.
+Choose complexity bounds appropriate to the endpoint before receiving input.
 
-The only family dependency is Core's native exception/resource support. Data, transformer and Ownership runtimes are not required. No config or migration is shipped. Publish guidance through `nvl-filterable-skills` and translations through `nvl-filterable-translations`; preserve host resource names. Consult README.md and UPGRADING.md for native examples.
+## Native input
+
+Filters and sorts are lists, including when only one entry is supplied.
+A filter is `array{alias:string,operator:FilterOperator|string,value?:mixed}`.
+A sort is `array{alias:string,direction:'asc'|'desc'}`.
+All keys are exact; HTTP scalar shorthand, comma splitting and DTO mapping belong to the host.
+Omitted or explicit null values are valid only for declared null checks, which require `nullable: true`.
+`in`/`not_in` require scalar lists; `between` requires exactly two values.
+Empty sorts select schema defaults and append the tie-breaker once.
+Unknown keys, aliases, operators, malformed values and excessive complexity fail before builder mutation.
+
+## Query guarantees
+
+Preserve the caller's visibility and ownership predicates before applying filters.
+Relation filters use declared paths; contains predicates escape wildcard characters as literal text.
+Datetime input normalizes valid instants to UTC; permissive PHP parsing is not the contract.
+Custom handlers receive a nested builder and normalized criterion.
+Keep handler predicates grouped and SQL parameterized; trusted callbacks remain host code.
+The service mutates/returns a builder and does not execute or authorize the final query.
+It supplies no transaction, revision, idempotency or event workflow because it performs no writes.
+
+## Bound and verify
+
+Default maxima are 25 filters, 5 sorts, 100 values per filter and 255 string bytes.
+Use a bounded paginator; Filterable's complexity limits do not bound the returned row count.
+Test real rows for numeric/date/null semantics, literal wildcard text and relation membership.
+Test malformed shapes and verify an invalid call leaves the builder unchanged.
+Test custom OR handlers against a pre-existing caller predicate.
+Verify default sorting and tie-breaking on the actual database driver.
+Use `FilterableException`'s stable code/field context for host transport error mapping.
+Core supplies native support; Data, TypeScript and Ownership packages are not runtime requirements.
+No optional library feature needs activation and no package maintenance command is registered.
+Run the affected application tests with `php artisan test --compact`.

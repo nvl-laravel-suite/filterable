@@ -112,6 +112,10 @@ Sort entries contain exactly `alias` and `direction`, with direction `asc` or `d
 
 `contains` and `not_contains` escape `%`, `_`, and the escape character, so user input always has literal substring semantics. Case, collation, and accent behavior follows the database column and driver. If an endpoint requires a different strategy, provide a custom handler and test it on every supported driver.
 
+Date criteria target database DATE columns. A date comparison against a timestamp is not a whole-day predicate; use a trusted handler with explicit timezone/day boundaries for that behavior. Date-time criteria normalize to UTC, so store UTC instants and use a UTC database session for timestamp comparisons, or provide an explicit storage-aware handler. The applier does not infer a model cast's display timezone.
+
+Negative operators retain SQL NULL semantics: `not_equals`, `not_in` and `not_contains` exclude NULL rows. Use `is_null` or a reviewed grouped custom predicate when the product needs to include missing values. A nullable definition permits explicit null checks; it does not change negative comparisons into null-inclusive predicates.
+
 Never expose raw SQL, arbitrary JSON paths, request-provided relations, or request-provided columns.
 
 ## Custom handlers
