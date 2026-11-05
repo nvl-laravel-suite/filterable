@@ -5,9 +5,17 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.0.1] - 2026-11-05
+
 ### Fixed
 
 - Preserve fractional date-time precision in native scalar, set and range query bindings while retaining caller predicates and normalized Carbon values for custom handlers.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- preserve fractional date-time bindings
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.0] - 2026-11-03
 
