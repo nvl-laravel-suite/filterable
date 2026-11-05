@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Filterable\Services;
 
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
@@ -128,15 +129,17 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
             return $query->whereBetween($column, $this->normalizedList($criterion));
         }
 
+        $value = $this->queryValue($criterion['value']);
+
         return match ($operator) {
-            FilterOperator::Equals => $query->where($column, '=', $criterion['value']),
-            FilterOperator::NotEquals => $query->where($column, '!=', $criterion['value']),
+            FilterOperator::Equals => $query->where($column, '=', $value),
+            FilterOperator::NotEquals => $query->where($column, '!=', $value),
             FilterOperator::Contains => $this->whereContains($query, $column, $criterion, false),
             FilterOperator::NotContains => $this->whereContains($query, $column, $criterion, true),
-            FilterOperator::Before, FilterOperator::Lt => $query->where($column, '<', $criterion['value']),
-            FilterOperator::After, FilterOperator::Gt => $query->where($column, '>', $criterion['value']),
-            FilterOperator::Gte => $query->where($column, '>=', $criterion['value']),
-            FilterOperator::Lte => $query->where($column, '<=', $criterion['value']),
+            FilterOperator::Before, FilterOperator::Lt => $query->where($column, '<', $value),
+            FilterOperator::After, FilterOperator::Gt => $query->where($column, '>', $value),
+            FilterOperator::Gte => $query->where($column, '>=', $value),
+            FilterOperator::Lte => $query->where($column, '<=', $value),
         };
     }
 
@@ -189,7 +192,17 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
             );
         }
 
-        return $criterion['value'];
+        return array_map($this->queryValue(...), $criterion['value']);
+    }
+
+    /** Preserve fractional instants before Laravel formats date objects to whole seconds. */
+    private function queryValue(mixed $value): mixed
+    {
+        if ($value instanceof DateTimeInterface && $value->format('u') !== '000000') {
+            return $value->format('Y-m-d H:i:s.u');
+        }
+
+        return $value;
     }
 
     /**

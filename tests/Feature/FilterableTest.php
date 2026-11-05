@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -219,6 +221,47 @@ it('normalizes exact dates, ranges, and timezone-aware instants', function (): v
 
     expect($range)->toBe(['Beta', 'Gamma'])
         ->and($instant)->toBe(['Alpha']);
+});
+
+it('preserves fractional date-time query bindings and caller predicates', function (FilterOperator $operator, mixed $value, array $expectedIds, array $expectedBindings): void {
+    FilterableRecord::query()->whereKey(1)->update(['occurred_at' => '2026-01-01 10:00:00.123456']);
+    $schema = new FilterSchema([
+        new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [$operator]),
+    ], []);
+    $query = app(EloquentFilterApplier::class)->apply(
+        FilterableRecord::query()->where('group_id', 1)->orderBy('id'),
+        $schema,
+        [['alias' => 'occurred', 'operator' => $operator, 'value' => $value]],
+    );
+
+    expect($query->pluck('id')->all())->toBe($expectedIds)
+        ->and($query->getConnection()->prepareBindings($query->getBindings()))->toBe([1, ...$expectedBindings]);
+})->with([
+    'equality with timezone conversion' => [FilterOperator::Equals, '2026-01-01T12:00:00.123456+02:00', [1], ['2026-01-01 10:00:00.123456']],
+    'set membership' => [FilterOperator::In, ['2026-01-01T10:00:00.123456Z'], [1], ['2026-01-01 10:00:00.123456']],
+    'inclusive range' => [FilterOperator::Between, ['2026-01-01T10:00:00.123455Z', '2026-01-01T10:00:00.123457Z'], [1], ['2026-01-01 10:00:00.123455', '2026-01-01 10:00:00.123457']],
+    'before a fractional instant' => [FilterOperator::Before, '2026-01-01T10:00:00.123457Z', [1], ['2026-01-01 10:00:00.123457']],
+    'after a fractional instant' => [FilterOperator::After, '2026-01-01T10:00:00.123457Z', [3], ['2026-01-01 10:00:00.123457']],
+]);
+
+it('retains normalized Carbon instants for date-time custom handlers', function (): void {
+    $captured = null;
+    $schema = new FilterSchema([
+        new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, handler: function (Builder $query, array $criterion) use (&$captured): Builder {
+            $captured = $criterion['value'];
+
+            return $query->whereKey(1);
+        }),
+    ], []);
+    $query = app(EloquentFilterApplier::class)->apply(
+        FilterableRecord::query()->where('group_id', 1),
+        $schema,
+        [['alias' => 'occurred', 'operator' => 'equals', 'value' => '2026-01-01T12:00:00.123456+02:00']],
+    );
+
+    expect($query->pluck('id')->all())->toBe([1])
+        ->and($captured)->toBeInstanceOf(CarbonImmutable::class)
+        ->and($captured->format('Y-m-d H:i:s.uP'))->toBe('2026-01-01 10:00:00.123456+00:00');
 });
 
 it('rejects relative, rollover, timezone-less, and malformed ranges', function (

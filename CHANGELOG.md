@@ -5,6 +5,10 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve fractional date-time precision in native scalar, set and range query bindings while retaining caller predicates and normalized Carbon values for custom handlers.
+
 ## [7.0.0] - 2026-11-03
 
 - Adopt the reviewed NVL 7 family for PHP 8.4+ and Laravel 13, with compatible required and optional NVL peers. Review the package upgrade guide before deployment.
