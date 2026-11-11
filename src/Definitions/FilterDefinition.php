@@ -34,6 +34,8 @@ final readonly class FilterDefinition
      * @param  array<array-key, mixed>  $operators
      * @param  array<array-key, mixed>  $enumValues
      * @param  (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias:string,operator:FilterOperator,value:mixed}): \Illuminate\Database\Eloquent\Builder<*>)|null  $handler
+     * @param  int|null  $minimum  Smallest accepted integer value, for example the column's own range.
+     * @param  int|null  $maximum  Largest accepted integer value.
      */
     public function __construct(
         public string $alias,
@@ -43,6 +45,8 @@ final readonly class FilterDefinition
         public bool $nullable = false,
         array $enumValues = [],
         public ?Closure $handler = null,
+        public ?int $minimum = null,
+        public ?int $maximum = null,
     ) {
         if (! preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/D', $alias)) {
             throw new FilterableException(
@@ -60,6 +64,15 @@ final readonly class FilterDefinition
                 "Filter [{$alias}] has an invalid column or relation path.",
                 'invalid_filter_column',
                 "filter.{$alias}",
+            );
+        }
+
+        if (($minimum !== null || $maximum !== null)
+            && ($type !== FilterValueType::Integer || ($minimum !== null && $maximum !== null && $minimum > $maximum))) {
+            throw new FilterableException(
+                "Filter [{$alias}] declares an invalid integer range.",
+                'invalid_filter_schema',
+                "filter.{$alias}.value",
             );
         }
 

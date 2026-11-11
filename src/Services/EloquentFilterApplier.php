@@ -7,10 +7,12 @@ namespace Nvl\Filterable\Services;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use LogicException;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
+use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
 
 /**
@@ -34,7 +36,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      *
      * @param  Builder<TModel>  $query
      * @param  array<array-key, mixed>  $filters  List of array{alias:string, operator:FilterOperator|string, value?:scalar|array|null}.
-     * @param  array<array-key, mixed>  $sorts  List of array{alias:string, direction:'asc'|'desc'}.
+     * @param  array<array-key, mixed>  $sorts  List of array{alias:string, direction:SortDirection|'asc'|'desc'}.
      * @return Builder<TModel>
      */
     public function apply(Builder $query, FilterSchema $schema, array $filters = [], array $sorts = []): Builder
@@ -42,16 +44,14 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         $filters = $this->normalizer->filters($filters, $schema);
         $sorts = $this->normalizer->sorts($sorts, $schema);
         foreach ($filters as $criterion) {
-            $definition = $schema->filter($criterion['alias']);
-            if ($definition !== null) {
-                $this->applyDefinition($query, $criterion, $definition);
-            }
+            $definition = $schema->filter($criterion['alias'])
+                ?? throw new LogicException("Normalized filter [{$criterion['alias']}] is not declared.");
+            $this->applyDefinition($query, $criterion, $definition);
         }
         foreach ($sorts as $sort) {
-            $definition = $schema->sort($sort['alias']);
-            if ($definition !== null) {
-                $query->orderBy($definition->column, $sort['direction']);
-            }
+            $definition = $schema->sort($sort['alias'])
+                ?? throw new LogicException("Normalized sort [{$sort['alias']}] is not declared.");
+            $query->orderBy($definition->column, $sort['direction']);
         }
 
         return $query;

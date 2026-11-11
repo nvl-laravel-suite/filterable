@@ -25,6 +25,8 @@
                 "column",
                 "enumValues",
                 "handler",
+                "maximum",
+                "minimum",
                 "nullable",
                 "operators",
                 "type"

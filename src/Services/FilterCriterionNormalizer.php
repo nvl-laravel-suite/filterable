@@ -6,10 +6,13 @@ namespace Nvl\Filterable\Services;
 
 use Carbon\CarbonImmutable;
 use DateTimeImmutable;
+use DateTimeInterface;
+use Illuminate\Support\Str;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\FilterValueType;
+use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
 use Throwable;
 
@@ -67,7 +70,7 @@ final class FilterCriterionNormalizer
         if ($sorts === []) {
             $sorts = array_map(static fn (string $sort): array => [
                 'alias' => str_starts_with($sort, '-') ? substr($sort, 1) : $sort,
-                'direction' => str_starts_with($sort, '-') ? 'desc' : 'asc',
+                'direction' => str_starts_with($sort, '-') ? SortDirection::Desc : SortDirection::Asc,
             ], $schema->defaultSorts);
         }
         $normalized = [];
@@ -81,17 +84,20 @@ final class FilterCriterionNormalizer
             if ($schema->sort($alias) === null) {
                 throw new FilterableException("Unknown sort alias [{$alias}].", 'unknown_sort_alias', 'sort');
             }
-            if (! in_array($sort['direction'], ['asc', 'desc'], true)) {
+            $direction = $sort['direction'] instanceof SortDirection
+                ? $sort['direction']
+                : (is_string($sort['direction']) ? SortDirection::tryFrom($sort['direction']) : null);
+            if ($direction === null) {
                 throw new FilterableException("Sort [{$alias}] direction must be asc or desc.", 'invalid_sort_direction', 'sort');
             }
             if (in_array($alias, $aliases, true)) {
                 throw new FilterableException("Duplicate sort [{$alias}] is not allowed.", 'duplicate_sort', 'sort');
             }
-            $normalized[] = ['alias' => $alias, 'direction' => $sort['direction']];
+            $normalized[] = ['alias' => $alias, 'direction' => $direction->value];
             $aliases[] = $alias;
         }
         if ($schema->tieBreakerSort !== null && ! in_array($schema->tieBreakerSort, $aliases, true)) {
-            $normalized[] = ['alias' => $schema->tieBreakerSort, 'direction' => 'asc'];
+            $normalized[] = ['alias' => $schema->tieBreakerSort, 'direction' => SortDirection::Asc->value];
         }
 
         return $normalized;
@@ -232,7 +238,7 @@ final class FilterCriterionNormalizer
             throw new FilterableException('Filter values must be scalars or null.', 'invalid_filter_value_shape', "filter.{$definition->alias}.value");
         }
 
-        if (is_string($value) && strlen($value) > $schema->maximumStringLength) {
+        if (is_string($value) && Str::length($value) > $schema->maximumStringLength) {
             throw new FilterableException(
                 "Filter [{$definition->alias}] exceeds the maximum string length.",
                 'filter_string_too_long',
@@ -243,7 +249,7 @@ final class FilterCriterionNormalizer
         try {
             return match ($definition->type) {
                 FilterValueType::Boolean => $this->boolean($value),
-                FilterValueType::Integer => $this->integer($value),
+                FilterValueType::Integer => $this->integer($value, $definition),
                 FilterValueType::Decimal => $this->decimal($value),
                 FilterValueType::String => $this->string($value),
                 FilterValueType::Enum => $this->enum($value, $definition),
@@ -287,7 +293,7 @@ final class FilterCriterionNormalizer
     /**
      * Normalize a base-10 integer without coercion.
      */
-    private function integer(mixed $value): int
+    private function integer(mixed $value, FilterDefinition $definition): int
     {
         if (
             (! is_int($value) && ! is_string($value))
@@ -304,6 +310,14 @@ final class FilterCriterionNormalizer
         if ($normalized === false) {
             throw new FilterableException(
                 'Integer filter value is invalid or outside the supported range.',
+                'invalid_integer_filter_value',
+            );
+        }
+
+        if (($definition->minimum !== null && $normalized < $definition->minimum)
+            || ($definition->maximum !== null && $normalized > $definition->maximum)) {
+            throw new FilterableException(
+                'Integer filter value is outside the declared range.',
                 'invalid_integer_filter_value',
             );
         }
@@ -334,14 +348,14 @@ final class FilterCriterionNormalizer
      */
     private function string(mixed $value): string
     {
-        if (! is_string($value)) {
+        if (! is_string($value) || str_contains($value, "\0") || preg_match('//u', $value) !== 1) {
             throw new FilterableException(
                 'String filter value is invalid.',
                 'invalid_string_filter_value',
             );
         }
 
-        $normalized = trim((string) $value);
+        $normalized = trim($value);
 
         if ($normalized === '') {
             throw new FilterableException(
@@ -390,6 +404,7 @@ final class FilterCriterionNormalizer
             $date === false
             || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
             || $date->format('Y-m-d') !== $value
+            || ! $this->portableYear($date)
         ) {
             throw new FilterableException(
                 'Date filter value is not a valid calendar date.',
@@ -424,13 +439,25 @@ final class FilterCriterionNormalizer
         );
         $errors = DateTimeImmutable::getLastErrors();
 
-        if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+        $instant = $date === false ? null : CarbonImmutable::instance($date)->utc();
+
+        if ($instant === null
+            || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+            || ! $this->portableYear($instant)) {
             throw new FilterableException(
                 'Date-time filter value is not a valid instant.',
                 'invalid_date_time_filter_value',
             );
         }
 
-        return CarbonImmutable::instance($date)->utc();
+        return $instant;
+    }
+
+    /** Years 0001-9999 are the calendar range every supported database accepts. */
+    private function portableYear(DateTimeInterface $date): bool
+    {
+        $year = (int) $date->format('Y');
+
+        return $year >= 1 && $year <= 9999;
     }
 }

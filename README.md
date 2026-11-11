@@ -100,7 +100,7 @@ Numeric strings, date-times, aliases and database paths must match their complet
 
 Supported operators are `equals`, `not_equals`, `contains`, `not_contains`, `in`, `not_in`, `between`, `before`, `after`, `gt`, `lt`, `gte`, `lte`, `is_null`, and `is_not_null`. A definition must explicitly allow each operator, and schema construction rejects operators that do not apply to the definition's value type.
 
-Boolean parsing accepts only `true`, `false`, `1`, and `0`. Integers use strict base-10 syntax. Decimals reject locale separators and scientific notation and remain strings to avoid binary floating-point surprises. Dates require exact `YYYY-MM-DD` calendar values. Date-times require ISO-8601 instants with an explicit timezone and normalize to UTC database timestamps. Empty strings are rejected. Null operators require `nullable=true`.
+Boolean parsing accepts only `true`, `false`, `1`, and `0`. Integers use strict base-10 syntax. Decimals reject locale separators and scientific notation and remain strings to avoid binary floating-point surprises. Dates require exact `YYYY-MM-DD` calendar values. Date-times require ISO-8601 instants with an explicit timezone and normalize to UTC database timestamps. Empty strings are rejected. Null operators require `nullable=true`. Strings must be valid UTF-8 without NUL bytes. Dates and UTC-normalized date-times must fall in years 0001–9999. Integers are validated as 64-bit values; for a narrower column declare `minimum`/`maximum` on the `FilterDefinition` (for example `minimum: -2_147_483_648, maximum: 2_147_483_647` for a 32-bit column), because PostgreSQL rejects an out-of-range comparison value with a database error instead of matching nothing.
 
 Native scalar, set and range filters retain fractional seconds up to six digits in their bound UTC timestamps. Use column and stored-value precision that can represent those instants. Custom handlers continue to receive normalized `CarbonImmutable` values and own their predicate bindings.
 
@@ -108,7 +108,7 @@ Native scalar, set and range filters retain fractional seconds up to six digits 
 
 Handlers are trusted, predicate-only callbacks. Keep them bounded and parameterized, and use them only for `where`, `orWhere`, `whereHas`, or equivalent predicate composition. Prepare joins and selected columns on the caller before filtering, and declare ordering through `SortDefinition`; query-shape mutations inside a nested handler are outside the callback contract. This grouping is a composition safeguard, not an authorization sandbox: a trusted callback can still use raw SQL or otherwise bypass application rules. Authorize the query before exposing results and test every custom handler's boundary.
 
-Sort entries contain exactly `alias` and `direction`, with direction `asc` or `desc`. Duplicate and excessive sorts are rejected. When `tieBreakerSort` is declared, its ascending column is appended unless already present, which makes offset and cursor pagination deterministic.
+Sort entries contain exactly `alias` and `direction`, with direction `asc` or `desc` (or a `SortDirection` case). Duplicate and excessive sorts are rejected. When `tieBreakerSort` is declared, its ascending column is appended unless already present, which makes offset and cursor pagination deterministic.
 
 ## Database portability
 
@@ -117,6 +117,8 @@ Sort entries contain exactly `alias` and `direction`, with direction `asc` or `d
 Date criteria target database DATE columns. A date comparison against a timestamp is not a whole-day predicate; use a trusted handler with explicit timezone/day boundaries for that behavior. Date-time criteria normalize to UTC, so store UTC instants and use a UTC database session for timestamp comparisons, or provide an explicit storage-aware handler. The applier does not infer a model cast's display timezone.
 
 Negative operators retain SQL NULL semantics: `not_equals`, `not_in` and `not_contains` exclude NULL rows. Use `is_null` or a reviewed grouped custom predicate when the product needs to include missing values. A nullable definition permits explicit null checks; it does not change negative comparisons into null-inclusive predicates.
+
+On a relation path every operator is evaluated inside `whereHas`, so a negative operator matches a parent that has at least one related row satisfying the negated comparison. `tags.slug not_equals 'php'` therefore matches a post tagged both `php` and `laravel` (the `laravel` row is not `php`) and never matches a post without tags; it does not mean "has no `php` tag", and `not_in` and `not_contains` behave the same way. Use a custom handler built on `whereDoesntHave` when an endpoint needs that exclusion.
 
 Never expose raw SQL, arbitrary JSON paths, request-provided relations, or request-provided columns.
 

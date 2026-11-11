@@ -37,7 +37,7 @@ beforeEach(function (): void {
         $table->boolean('is_active');
         $table->string('note')->nullable();
         $table->date('created_at');
-        $table->dateTime('occurred_at');
+        $table->dateTime('occurred_at', 6);
         $table->unsignedBigInteger('group_id');
     });
 
@@ -334,6 +334,35 @@ it('applies allowlisted nested relation filters', function (): void {
     expect($names)->toBe(['Alpha', 'Gamma']);
 });
 
+it('matches negative operators on a relation path against any single related row', function (
+    FilterOperator $operator,
+    mixed $value,
+    array $expected,
+): void {
+    FilterableGroup::query()->insert(['id' => 3, 'name' => 'Empty']);
+    $schema = new FilterSchema(
+        filters: [new FilterDefinition('record', 'records.name', operators: [
+            FilterOperator::NotEquals,
+            FilterOperator::NotIn,
+            FilterOperator::NotContains,
+        ])],
+        sorts: [new SortDefinition('id', 'id')],
+        defaultSorts: ['id'],
+    );
+
+    $names = app(EloquentFilterApplier::class)->apply(FilterableGroup::query(), $schema, [
+        ['alias' => 'record', 'operator' => $operator, 'value' => $value],
+    ])->pluck('name')->all();
+
+    expect($names)->toBe($expected);
+})->with([
+    'not_equals keeps a parent that also has the excluded row' => [FilterOperator::NotEquals, 'Alpha', ['Editorial', 'Sales']],
+    'not_in keeps a parent with one row outside the list' => [FilterOperator::NotIn, ['Alpha'], ['Editorial', 'Sales']],
+    'not_in drops a parent whose rows are all listed' => [FilterOperator::NotIn, ['Alpha', 'Gamma'], ['Sales']],
+    'not_contains keeps a parent that also has a matching row' => [FilterOperator::NotContains, 'lph', ['Editorial', 'Sales']],
+    'not_contains drops a parent whose rows all match' => [FilterOperator::NotContains, 'a', []],
+]);
+
 it('fails closed for unknown aliases and unsupported operators', function (): void {
     expect(fn () => FilterableRecord::query()->applyFilters([
         ['alias' => 'private_column', 'operator' => FilterOperator::Equals, 'value' => 'secret'],
@@ -454,6 +483,22 @@ it('enforces filter, sort, list-value, and string complexity limits', function (
     expect(fn () => $applier->apply(FilterableRecord::query(), $schema, [
         ['alias' => 'name', 'operator' => FilterOperator::Equals, 'value' => 'abcde'],
     ], [])->get())->toThrow(FilterableException::class, 'maximum string length');
+});
+
+it('measures the string limit in characters rather than bytes', function (): void {
+    $applier = app(EloquentFilterApplier::class);
+    $schema = new FilterSchema(
+        filters: [new FilterDefinition('name', 'name')],
+        sorts: [],
+        maximumStringLength: 4,
+    );
+
+    expect($applier->apply(FilterableRecord::query(), $schema, [
+        ['alias' => 'name', 'operator' => FilterOperator::Equals, 'value' => 'Алфа'],
+    ])->count())->toBe(0)
+        ->and(fn () => $applier->apply(FilterableRecord::query(), $schema, [
+            ['alias' => 'name', 'operator' => FilterOperator::Equals, 'value' => 'Алфа5'],
+        ]))->toThrow(FilterableException::class, 'maximum string length');
 });
 
 it('rejects duplicate HTTP and programmatic sorts', function (): void {
@@ -628,3 +673,90 @@ it('enforces every native query complexity budget before mutation', function (ar
     'values' => [[['alias' => 'name', 'operator' => 'in', 'value' => ['a', 'b']]], [], 'filter_value_complexity_exceeded'],
     'strings' => [[['alias' => 'name', 'operator' => 'equals', 'value' => 'abcde']], [], 'filter_string_too_long'],
 ]);
+
+it('rejects string values a database cannot store as text', function (FilterOperator $operator, string $value): void {
+    $query = FilterableRecord::query();
+
+    try {
+        $query->applyFilters([['alias' => 'name', 'operator' => $operator, 'value' => $value]])->get();
+        $this->fail('A malformed string reached the database.');
+    } catch (FilterableException $exception) {
+        expect($exception->errorCode)->toBe('invalid_string_filter_value')
+            ->and($exception->path)->toBe('filter.name.value');
+    }
+})->with([
+    'NUL byte' => [FilterOperator::Equals, "Al\0pha"],
+    'NUL byte in a substring' => [FilterOperator::Contains, "\0"],
+    'invalid UTF-8' => [FilterOperator::Equals, "Al\xC3\x28"],
+    'truncated UTF-8 in a substring' => [FilterOperator::Contains, "\xE2\x82"],
+]);
+
+it('treats backslashes and the escape character as literal substring characters', function (): void {
+    FilterableRecord::query()->insert([
+        ['id' => 4, 'name' => 'Delta', 'status' => 'active', 'price' => 40, 'amount' => '40.00', 'is_active' => true, 'note' => 'back\\slash', 'created_at' => '2026-01-04', 'occurred_at' => '2026-01-04 10:00:00', 'group_id' => 1],
+        ['id' => 5, 'name' => 'Epsilon', 'status' => 'active', 'price' => 50, 'amount' => '50.00', 'is_active' => true, 'note' => 'bang!', 'created_at' => '2026-01-05', 'occurred_at' => '2026-01-05 10:00:00', 'group_id' => 1],
+    ]);
+    $names = static fn (string $needle): array => FilterableRecord::query()
+        ->applyFilters([['alias' => 'note', 'operator' => FilterOperator::Contains, 'value' => $needle]])
+        ->pluck('name')
+        ->all();
+
+    expect($names('\\'))->toBe(['Delta'])
+        ->and($names('k\\s'))->toBe(['Delta'])
+        ->and($names('\\%'))->toBe([])
+        ->and($names('!'))->toBe(['Epsilon'])
+        ->and($names('g!'))->toBe(['Epsilon'])
+        ->and($names('!_'))->toBe([]);
+});
+
+it('rejects integers outside a declared range and calendar years no database accepts', function (): void {
+    $applier = app(EloquentFilterApplier::class);
+    $schema = new FilterSchema([
+        new FilterDefinition('price', 'price', FilterValueType::Integer, [FilterOperator::Lte, FilterOperator::In], minimum: -2_147_483_648, maximum: 2_147_483_647),
+        new FilterDefinition('created', 'created_at', FilterValueType::Date, [FilterOperator::After]),
+        new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [FilterOperator::After]),
+    ], []);
+    $count = static fn (string $alias, FilterOperator $operator, mixed $value): int => $applier
+        ->apply(FilterableRecord::query(), $schema, [['alias' => $alias, 'operator' => $operator, 'value' => $value]])
+        ->count();
+    $code = static function (string $alias, FilterOperator $operator, mixed $value) use ($count): ?string {
+        try {
+            $count($alias, $operator, $value);
+        } catch (FilterableException $exception) {
+            return $exception->errorCode;
+        }
+
+        return null;
+    };
+
+    expect($count('price', FilterOperator::Lte, '2147483647'))->toBe(3)
+        ->and($count('created', FilterOperator::After, '0001-01-01'))->toBe(3)
+        ->and($count('occurred', FilterOperator::After, '0001-01-01T00:00:00Z'))->toBe(3)
+        ->and($code('price', FilterOperator::Lte, '2147483648'))->toBe('invalid_integer_filter_value')
+        ->and($code('price', FilterOperator::In, [1, PHP_INT_MIN]))->toBe('invalid_integer_filter_value')
+        ->and($code('created', FilterOperator::After, '0000-01-01'))->toBe('invalid_date_filter_value')
+        ->and($code('occurred', FilterOperator::After, '0000-06-01T00:00:00Z'))->toBe('invalid_date_time_filter_value')
+        ->and($code('occurred', FilterOperator::After, '0001-01-01T00:00:00+02:00'))->toBe('invalid_date_time_filter_value')
+        ->and($code('occurred', FilterOperator::After, '9999-12-31T23:59:59-01:00'))->toBe('invalid_date_time_filter_value');
+});
+
+it('declares integer ranges only on integer filters with ordered bounds', function (Closure $definition): void {
+    expect($definition)->toThrow(FilterableException::class, 'invalid integer range');
+})->with([
+    'string filter' => [fn () => new FilterDefinition('name', 'name', maximum: 5)],
+    'decimal filter' => [fn () => new FilterDefinition('amount', 'amount', FilterValueType::Decimal, minimum: 0)],
+    'inverted bounds' => [fn () => new FilterDefinition('price', 'price', FilterValueType::Integer, minimum: 5, maximum: 4)],
+]);
+
+it('accepts the sort direction enum in native sorts', function (): void {
+    $query = app(EloquentFilterApplier::class)->apply(
+        FilterableRecord::query(),
+        (new FilterableRecord)->filterSchema(),
+        sorts: [['alias' => 'price', 'direction' => SortDirection::Desc]],
+    );
+
+    expect($query->getQuery()->orders)->toBe([
+        ['column' => 'price', 'direction' => 'desc'],
+        ['column' => 'id', 'direction' => 'asc'],
+    ])->and($query->pluck('name')->all())->toBe(['Gamma', 'Beta', 'Alpha']);
+});

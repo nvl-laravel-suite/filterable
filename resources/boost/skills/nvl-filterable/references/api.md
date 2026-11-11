@@ -38,13 +38,15 @@ template Nvl\Filterable\Contracts\EloquentFilterApplierContract::TModel of Illum
 
 ```text
 final readonly class Nvl\Filterable\Definitions\FilterDefinition
-public function __construct(string $alias, string $column, Nvl\Filterable\Enums\FilterValueType $type=\Nvl\Filterable\Enums\FilterValueType::String, array $operators=[\Nvl\Filterable\Enums\FilterOperator::Equals], bool $nullable=false, array $enumValues=[], ?Closure $handler=null): mixed
+public function __construct(string $alias, string $column, Nvl\Filterable\Enums\FilterValueType $type=\Nvl\Filterable\Enums\FilterValueType::String, array $operators=[\Nvl\Filterable\Enums\FilterOperator::Equals], bool $nullable=false, array $enumValues=[], ?Closure $handler=null, ?int $minimum=null, ?int $maximum=null): mixed
 @param non-empty-string $alias
 @param non-empty-string $column
 @param array<array-key, mixed> $operators
 @param array<array-key, mixed> $enumValues
 @param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): \Illuminate\Database\Eloquent\Builder<*> | null) $handler
 resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): Illuminate\Database\Eloquent\Builder<*> | null) $handler
+@param (int | null) $minimum
+@param (int | null) $maximum
 public readonly string $alias
 @param non-empty-string $alias
 public readonly string $column
@@ -54,6 +56,10 @@ public readonly array $enumValues
 public readonly ?Closure $handler
 @param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): \Illuminate\Database\Eloquent\Builder<*> | null) $handler
 resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): Illuminate\Database\Eloquent\Builder<*> | null) $handler
+public readonly ?int $maximum
+@param (int | null) $maximum
+public readonly ?int $minimum
+@param (int | null) $minimum
 public readonly bool $nullable
 public readonly array $operators
 @var list<FilterOperator>
