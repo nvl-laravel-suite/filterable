@@ -5,6 +5,8 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.0.2] - 2026-11-11
+
 ### Fixed
 
 - `maximumStringLength` now counts characters instead of bytes, so multibyte values such as Cyrillic text are no longer rejected at half the configured limit.
@@ -12,6 +14,12 @@ All notable changes to `nvl/filterable` are documented here.
 - `FilterDefinition` accepts optional `minimum`/`maximum` bounds for integer filters, so a value outside a 32-bit column's range is rejected as `invalid_integer_filter_value` instead of failing the PostgreSQL query.
 - Native sorts accept a `SortDirection` case as well as `asc`/`desc`; the normalizer now validates directions through the enum.
 - A normalized criterion or sort without a schema definition now fails loudly instead of being skipped silently.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- correct filter input handling without mbstring
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.1] - 2026-11-05
 
