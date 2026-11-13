@@ -5,9 +5,17 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.0.4] - 2026-11-13
+
 ### Fixed
 
 - Accept safely schema-qualified PostgreSQL columns when substring filters qualify a joined model query.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- close package transaction, event and query parity gaps
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.3] - 2026-11-13
 
