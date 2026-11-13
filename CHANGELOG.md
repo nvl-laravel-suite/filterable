@@ -5,6 +5,10 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Qualify filtered and sorted columns consistently across joined queries and harden scalar and list criterion normalization.
+
 ## [7.0.2] - 2026-11-11
 
 ### Fixed
@@ -119,4 +123,4 @@ All notable changes to `nvl/filterable` are documented here.
 - Added schema-time identifier, operator/type, nullability, and enum validation.
 - Split value normalization from Eloquent predicate application and normalized custom-handler criteria.
 - Added generated TypeScript value unions and sort directions.
-- Added SQLite, PostgreSQL, and MySQL package coverage in CI.
+- Added SQLite and PostgreSQL package coverage in CI.

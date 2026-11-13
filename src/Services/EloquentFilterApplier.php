@@ -51,7 +51,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         foreach ($sorts as $sort) {
             $definition = $schema->sort($sort['alias'])
                 ?? throw new LogicException("Normalized sort [{$sort['alias']}] is not declared.");
-            $query->orderBy($definition->column, $sort['direction']);
+            $query->orderBy($this->qualifyForQuery($query, $definition->column), $sort['direction']);
         }
 
         return $query;
@@ -82,14 +82,14 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         $column = array_pop($segments);
 
         if ($segments === []) {
-            $this->applyOperator($query, $column, $criterion);
+            $this->applyOperator($query, $this->qualifyForQuery($query, $column), $criterion);
 
             return;
         }
 
         $query->whereHas(
             implode('.', $segments),
-            fn (Builder $related): Builder => $this->applyOperator($related, $column, $criterion),
+            fn (Builder $related): Builder => $this->applyOperator($related, $related->qualifyColumn($column), $criterion),
         );
     }
 
@@ -108,6 +108,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         array $criterion,
     ): Builder {
         $operator = $criterion['operator'];
+        $dateFormat = $query->getModel()->getDateFormat();
 
         if ($operator === FilterOperator::IsNull) {
             return $query->whereNull($column);
@@ -118,18 +119,18 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         }
 
         if ($operator === FilterOperator::In) {
-            return $query->whereIn($column, $this->normalizedList($criterion));
+            return $query->whereIn($column, $this->normalizedList($criterion, $dateFormat));
         }
 
         if ($operator === FilterOperator::NotIn) {
-            return $query->whereNotIn($column, $this->normalizedList($criterion));
+            return $query->whereNotIn($column, $this->normalizedList($criterion, $dateFormat));
         }
 
         if ($operator === FilterOperator::Between) {
-            return $query->whereBetween($column, $this->normalizedList($criterion));
+            return $query->whereBetween($column, $this->normalizedList($criterion, $dateFormat));
         }
 
-        $value = $this->queryValue($criterion['value']);
+        $value = $this->queryValue($criterion['value'], $dateFormat);
 
         return match ($operator) {
             FilterOperator::Equals => $query->where($column, '=', $value),
@@ -141,6 +142,22 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
             FilterOperator::Gte => $query->where($column, '>=', $value),
             FilterOperator::Lte => $query->where($column, '<=', $value),
         };
+    }
+
+    /**
+     * Qualify bare columns when the query has joins so joined queries never fail on ambiguous identifiers.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     */
+    private function qualifyForQuery(Builder $query, string $column): string
+    {
+        if (str_contains($column, '.') || ($query->getQuery()->joins ?? []) === []) {
+            return $column;
+        }
+
+        return $query->qualifyColumn($column);
     }
 
     /**
@@ -182,7 +199,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      * @return list<mixed>
      */
-    private function normalizedList(array $criterion): array
+    private function normalizedList(array $criterion, ?string $dateFormat = null): array
     {
         if (! is_array($criterion['value']) || ! array_is_list($criterion['value'])) {
             throw new FilterableException(
@@ -192,14 +209,23 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
             );
         }
 
-        return array_map($this->queryValue(...), $criterion['value']);
+        return array_map(
+            fn (mixed $item): mixed => $this->queryValue($item, $dateFormat),
+            $criterion['value'],
+        );
     }
 
-    /** Preserve fractional instants before Laravel formats date objects to whole seconds. */
-    private function queryValue(mixed $value): mixed
+    /** Preserve fractional instants and match microsecond model date formats on SQLite. */
+    private function queryValue(mixed $value, ?string $dateFormat = null): mixed
     {
-        if ($value instanceof DateTimeInterface && $value->format('u') !== '000000') {
-            return $value->format('Y-m-d H:i:s.u');
+        if ($value instanceof DateTimeInterface) {
+            if ($value->format('u') !== '000000') {
+                return $value->format('Y-m-d H:i:s.u');
+            }
+
+            if ($dateFormat !== null && str_contains($dateFormat, 'u')) {
+                return $value->format($dateFormat);
+            }
         }
 
         return $value;
@@ -212,7 +238,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      */
     private function ensureSafeWrappedColumn(string $column): void
     {
-        if (preg_match('/\A(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\z/', $column) !== 1) {
+        if (preg_match('/\A(?:(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\.)?(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\z/', $column) !== 1) {
             throw new FilterableException(
                 'The database grammar returned an unsafe column identifier.',
                 'unsafe_wrapped_filter_column',

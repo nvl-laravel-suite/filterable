@@ -330,8 +330,19 @@ final class FilterCriterionNormalizer
      */
     private function decimal(mixed $value): string
     {
+        if (is_float($value)) {
+            if (! is_finite($value)) {
+                throw new FilterableException(
+                    'Decimal filter value is invalid.',
+                    'invalid_decimal_filter_value',
+                );
+            }
+
+            $value = $this->formatFiniteFloat($value);
+        }
+
         if (
-            (! is_int($value) && ! is_float($value) && ! is_string($value))
+            (! is_int($value) && ! is_string($value))
             || ! preg_match('/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/D', (string) $value)
         ) {
             throw new FilterableException(
@@ -341,6 +352,46 @@ final class FilterCriterionNormalizer
         }
 
         return (string) $value;
+    }
+
+    private function formatFiniteFloat(float $value): string
+    {
+        if ($value == 0.0) {
+            return '0';
+        }
+
+        $raw = strtolower((string) json_encode($value, JSON_THROW_ON_ERROR));
+        if (! str_contains($raw, 'e')) {
+            return str_ends_with($raw, '.0') ? substr($raw, 0, -2) : $raw;
+        }
+
+        $negative = str_starts_with($raw, '-');
+        if ($negative) {
+            $raw = substr($raw, 1);
+        }
+
+        [$mantissa, $exponentPart] = explode('e', $raw, 2);
+        $exponent = (int) $exponentPart;
+        if (abs($exponent) > 100) {
+            throw new FilterableException(
+                'Decimal filter value is invalid.',
+                'invalid_decimal_filter_value',
+            );
+        }
+
+        [$whole, $fraction] = array_pad(explode('.', $mantissa, 2), 2, '');
+        $digits = $whole.$fraction;
+        $decimalPosition = strlen($whole) + $exponent;
+
+        if ($decimalPosition <= 0) {
+            $formatted = '0.'.str_repeat('0', -$decimalPosition).rtrim($digits, '0');
+        } elseif ($decimalPosition >= strlen($digits)) {
+            $formatted = $digits.str_repeat('0', $decimalPosition - strlen($digits));
+        } else {
+            $formatted = substr($digits, 0, $decimalPosition).'.'.rtrim(substr($digits, $decimalPosition), '0');
+        }
+
+        return ($negative ? '-' : '').rtrim($formatted, '.');
     }
 
     /**

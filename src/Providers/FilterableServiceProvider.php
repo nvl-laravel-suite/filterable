@@ -10,6 +10,7 @@ use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Support\Globals\GlobalNames;
+use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Support\Traits\RegistersNamespacedResources;
 
 /**
@@ -24,6 +25,8 @@ final class FilterableServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->register(SupportServiceProvider::class);
+
         $this->app->singleton(FilterCriterionNormalizer::class);
         $this->app->singletonIf(EloquentFilterApplier::class);
         $this->app->singletonIf(EloquentFilterApplierContract::class, static fn (Container $app): EloquentFilterApplierContract => $app->make(EloquentFilterApplier::class));

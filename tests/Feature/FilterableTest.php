@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +16,7 @@ use Nvl\Filterable\Enums\FilterValueType;
 use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Filterable\Services\EloquentFilterApplier;
+use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Filterable\Tests\Fixtures\ConsumerQueryFilters;
 use Nvl\Filterable\Tests\Fixtures\FilterableGroup;
 use Nvl\Filterable\Tests\Fixtures\FilterableRecord;
@@ -759,4 +761,52 @@ it('accepts the sort direction enum in native sorts', function (): void {
         ['column' => 'price', 'direction' => 'desc'],
         ['column' => 'id', 'direction' => 'asc'],
     ])->and($query->pluck('name')->all())->toBe(['Gamma', 'Beta', 'Alpha']);
+});
+
+it('qualifies columns on joined queries and normalizes small finite floats and microsecond timestamps', function (): void {
+    $applier = app(EloquentFilterApplier::class);
+    $schema = (new FilterableRecord)->filterSchema();
+
+    $joined = $applier->apply(
+        FilterableRecord::query()
+            ->join('filterable_groups', 'filterable_groups.id', '=', 'filterable_records.group_id')
+            ->select('filterable_records.*'),
+        $schema,
+        [['alias' => 'name', 'operator' => FilterOperator::Contains, 'value' => 'lph']],
+        [['alias' => 'id', 'direction' => SortDirection::Asc]],
+    );
+
+    expect($joined->pluck('filterable_records.name')->all())->toBe(['Alpha']);
+
+    $normalizer = app(FilterCriterionNormalizer::class);
+    $normalized = $normalizer->filters(
+        [['alias' => 'amount', 'operator' => FilterOperator::Equals, 'value' => 0.00001]],
+        $schema,
+    );
+    expect($normalized[0]['value'])->toBe('0.00001');
+
+    Schema::create('filterable_microsecond_records', function (Blueprint $table): void {
+        $table->id();
+        $table->string('occurred_at');
+    });
+
+    $microModel = new class extends Model
+    {
+        public $timestamps = false;
+
+        protected $table = 'filterable_microsecond_records';
+
+        protected $dateFormat = 'Y-m-d H:i:s.u';
+
+        protected $guarded = [];
+    };
+
+    $microModel->newQuery()->create(['occurred_at' => '2026-01-01 00:00:00.000000']);
+    $microSchema = new FilterSchema(
+        filters: [new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [FilterOperator::Lte, FilterOperator::Equals])],
+        sorts: [new SortDefinition('id', 'id')],
+    );
+
+    expect($applier->apply($microModel->newQuery(), $microSchema, [['alias' => 'occurred', 'operator' => FilterOperator::Lte, 'value' => '2026-01-01T00:00:00Z']])->count())->toBe(1)
+        ->and($applier->apply($microModel->newQuery(), $microSchema, [['alias' => 'occurred', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01T00:00:00Z']])->count())->toBe(1);
 });
