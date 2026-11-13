@@ -5,9 +5,17 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.0.3] - 2026-11-13
+
 ### Fixed
 
 - Qualify filtered and sorted columns consistently across joined queries and harden scalar and list criterion normalization.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- harden package runtime safety, PostgreSQL portability and test performance
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.2] - 2026-11-11
 
