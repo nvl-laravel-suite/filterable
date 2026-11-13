@@ -763,6 +763,37 @@ it('accepts the sort direction enum in native sorts', function (): void {
     ])->and($query->pluck('name')->all())->toBe(['Gamma', 'Beta', 'Alpha']);
 });
 
+it('filters schema-qualified joined models with literal substring operators', function (FilterOperator $operator, array $names): void {
+    $model = new FilterableRecord;
+    $schema = $model->getConnection()->getDriverName() === 'pgsql' ? 'public' : 'main';
+    $model->setTable($schema.'.filterable_records');
+
+    $query = app(EloquentFilterApplier::class)->apply(
+        $model->newQuery()
+            ->join('filterable_groups', 'filterable_groups.id', '=', $model->qualifyColumn('group_id'))
+            ->select($model->qualifyColumn('name')),
+        $model->filterSchema(),
+        [['alias' => 'name', 'operator' => $operator, 'value' => 'lph']],
+        [['alias' => 'id', 'direction' => SortDirection::Asc]],
+    );
+
+    expect($query->pluck($model->qualifyColumn('name'))->all())->toBe($names);
+})->with([
+    'contains' => [FilterOperator::Contains, ['Alpha']],
+    'not contains' => [FilterOperator::NotContains, ['Beta', 'Gamma']],
+]);
+
+it('rejects unsafe qualified identifiers on joined models', function (): void {
+    $model = (new FilterableRecord)->setTable('public.filterable_records;drop');
+    $query = $model->newQuery()->join('filterable_groups', 'filterable_groups.id', '=', $model->qualifyColumn('group_id'));
+
+    expect(fn () => app(EloquentFilterApplier::class)->apply(
+        $query,
+        $model->filterSchema(),
+        [['alias' => 'name', 'operator' => FilterOperator::Contains, 'value' => 'lph']],
+    ))->toThrow(FilterableException::class, 'unsafe column identifier');
+});
+
 it('qualifies columns on joined queries and normalizes small finite floats and microsecond timestamps', function (): void {
     $applier = app(EloquentFilterApplier::class);
     $schema = (new FilterableRecord)->filterSchema();

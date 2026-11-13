@@ -232,13 +232,13 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
     }
 
     /**
-     * Prove that a database grammar returned only one quoted, allowlisted identifier.
+     * Prove that a database grammar returned only a safely qualified identifier.
      *
      * @phpstan-assert literal-string $column
      */
     private function ensureSafeWrappedColumn(string $column): void
     {
-        if (preg_match('/\A(?:(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\.)?(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\z/', $column) !== 1) {
+        if (preg_match('/\A(?:(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\.){0,2}(?:[A-Za-z_][A-Za-z0-9_]*|`[A-Za-z_][A-Za-z0-9_]*`|"[A-Za-z_][A-Za-z0-9_]*"|\[[A-Za-z_][A-Za-z0-9_]*\])\z/', $column) !== 1) {
             throw new FilterableException(
                 'The database grammar returned an unsafe column identifier.',
                 'unsafe_wrapped_filter_column',

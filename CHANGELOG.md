@@ -5,6 +5,10 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Accept safely schema-qualified PostgreSQL columns when substring filters qualify a joined model query.
+
 ## [7.0.3] - 2026-11-13
 
 ### Fixed
