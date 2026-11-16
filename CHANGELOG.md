@@ -5,6 +5,20 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-11-16
+
+### Highlights
+
+- Adapt flat request parameters to declared filters, support model method callbacks, and preserve query predicates while applying text filters.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- close NVL consumer adoption and portability gaps
+- require Core 7.1 for packages using the text matcher
+- Merge pull request #21 from nicolasvlachos/codex/consumer-postgresql-validation
+<!-- NVL GENERATED CHANGES END -->
+
 ## [7.0.4] - 2026-11-13
 
 ### Fixed
