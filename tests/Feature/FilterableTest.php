@@ -959,3 +959,64 @@ it('qualifies columns on joined queries and normalizes small finite floats and m
     expect($applier->apply($microModel->newQuery(), $microSchema, [['alias' => 'occurred', 'operator' => FilterOperator::Lte, 'value' => '2026-01-01T00:00:00Z']])->count())->toBe(1)
         ->and($applier->apply($microModel->newQuery(), $microSchema, [['alias' => 'occurred', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01T00:00:00Z']])->count())->toBe(1);
 });
+
+it('compares timestamptz columns by instant even with an offset-free microsecond model format', function (FilterOperator $operator, mixed $value, array $expectedIds): void {
+    $connection = DB::connection();
+    if ($connection->getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Session time zones apply only to native PostgreSQL timestamptz columns.');
+    }
+
+    Schema::dropIfExists('filterable_instant_records');
+    Schema::create('filterable_instant_records', function (Blueprint $table): void {
+        $table->id();
+        $table->timestampTz('occurred_at', 6);
+    });
+    $connection->table('filterable_instant_records')->insert([
+        ['id' => 1, 'occurred_at' => '2026-01-01 12:00:00+00:00'],
+        ['id' => 2, 'occurred_at' => '2026-01-01 12:00:00.123456+00:00'],
+        ['id' => 3, 'occurred_at' => '2026-01-01 14:00:00+00:00'],
+    ]);
+    $connection->statement("SET TIME ZONE 'Europe/Sofia'");
+    $model = new class extends Model
+    {
+        public $timestamps = false;
+
+        protected $table = 'filterable_instant_records';
+
+        protected $dateFormat = 'Y-m-d H:i:s.u';
+    };
+    $schema = new FilterSchema([new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [$operator])], [new SortDefinition('id', 'id')]);
+
+    try {
+        expect(app(EloquentFilterApplier::class)->apply($model->newQuery(), $schema, [['alias' => 'occurred', 'operator' => $operator, 'value' => $value]], [['alias' => 'id', 'direction' => SortDirection::Asc]])->pluck('id')->all())
+            ->toBe($expectedIds);
+    } finally {
+        $connection->statement('SET TIME ZONE UTC');
+        Schema::dropIfExists('filterable_instant_records');
+    }
+})->with([
+    'equality' => [FilterOperator::Equals, '2026-01-01T12:00:00.123456Z', [2]],
+    'range' => [FilterOperator::Between, ['2026-01-01T11:59:59Z', '2026-01-01T12:00:00.000001Z'], [1]],
+    'set membership' => [FilterOperator::In, ['2026-01-01T12:00:00Z', '2026-01-01T16:00:00+02:00'], [1, 3]],
+]);
+
+it('caches the date-time column storage type between filters', function (): void {
+    $connection = DB::connection();
+    $schema = new FilterSchema([new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [FilterOperator::Gte])], []);
+    $filters = [['alias' => 'occurred', 'operator' => FilterOperator::Gte, 'value' => '2026-01-02T00:00:00Z']];
+    $applier = app(EloquentFilterApplier::class);
+    $countFilterQueries = static function () use ($connection, $applier, $schema, $filters): int {
+        $connection->flushQueryLog();
+        $connection->enableQueryLog();
+        expect($applier->apply(FilterableRecord::query()->orderBy('id'), $schema, $filters)->pluck('id')->all())->toBe([2, 3]);
+        $connection->disableQueryLog();
+
+        return count($connection->getQueryLog());
+    };
+
+    $first = $countFilterQueries();
+    $second = $countFilterQueries();
+
+    expect($first)->toBe($connection->getDriverName() === 'pgsql' ? 2 : 1)
+        ->and($second)->toBe(1);
+});

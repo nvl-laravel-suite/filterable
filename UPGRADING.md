@@ -2,7 +2,7 @@
 
 ## Unreleased: PostgreSQL date-time bindings
 
-Date-time filter values are now bound as `Y-m-d H:i:s.uP` UTC instants on PostgreSQL. `timestamptz` columns therefore match the requested instant even when the session time zone is not UTC. `timestamp` columns ignore the offset and keep comparing UTC wall times. A consumer that asserted exact offset-free PostgreSQL bindings, or filters a text column with the default date format, should expect the `+00:00` suffix; declare a model date format containing `u` to keep a custom text representation. Such a format is bound as declared, so on a `timestamptz` column include an offset (`Y-m-d H:i:s.uP`). SQLite bindings are unchanged.
+Date-time filter values are now bound as `Y-m-d H:i:s.uP` UTC instants on PostgreSQL. `timestamptz` columns therefore match the requested instant even when the session time zone is not UTC. `timestamp` columns ignore the offset and keep comparing UTC wall times. The format now follows the column's storage type, looked up once per connection, table and column: native `timestamptz`, `timestamp` and `date` columns always receive the offset instant, even when the model date format is an offset-free microsecond format such as `Y-m-d H:i:s.u`, while `text`, `varchar` and `char` columns receive the model's declared date format. A consumer that asserted exact offset-free bindings on a native date-time column should expect the `+00:00` suffix; a date stored as text keeps matching its declared format without an offset workaround. A column whose type cannot be read keeps the previous rule. SQLite bindings are unchanged.
 
 ## Native Light API
 

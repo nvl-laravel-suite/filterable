@@ -5,6 +5,10 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Choose PostgreSQL date-time filter bindings from the column's storage type instead of the model date format: `timestamptz`, `timestamp` and `date` columns bind the UTC instant with its offset even under an offset-free microsecond format such as `Y-m-d H:i:s.u`, so they no longer depend on the session time zone, while text columns bind the declared model format. Column types are looked up once and cached per connection, table and column.
+
 ## [7.2.0] - 2026-11-17
 
 ### Fixed

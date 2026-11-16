@@ -303,7 +303,7 @@ public function parse(array $params, Nvl\Filterable\Definitions\FilterSchema $sc
 
 ```text
 final readonly class Nvl\Filterable\Services\EloquentFilterApplier implements Nvl\Filterable\Contracts\EloquentFilterApplierContract
-public function __construct(Nvl\Filterable\Services\FilterCriterionNormalizer $normalizer, ?Nvl\Support\Contracts\TextMatcher $textMatcher=null): mixed
+public function __construct(Nvl\Filterable\Services\FilterCriterionNormalizer $normalizer, ?Nvl\Support\Contracts\TextMatcher $textMatcher=null, ?Nvl\Filterable\Services\ColumnStorageTypes $columnTypes=null): mixed
 public function apply(Illuminate\Database\Eloquent\Builder $query, Nvl\Filterable\Definitions\FilterSchema $schema, array $filters=[], array $sorts=[]): Illuminate\Database\Eloquent\Builder
 @template TModel of Model
 resolved @template TModel of Illuminate\Database\Eloquent\Model

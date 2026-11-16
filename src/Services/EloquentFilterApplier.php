@@ -7,11 +7,13 @@ namespace Nvl\Filterable\Services;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use LogicException;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
+use Nvl\Filterable\Enums\FilterValueType;
 use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Support\Contracts\TextMatcher;
@@ -29,6 +31,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
     public function __construct(
         private FilterCriterionNormalizer $normalizer,
         private ?TextMatcher $textMatcher = null,
+        private ?ColumnStorageTypes $columnTypes = null,
     ) {}
 
     /**
@@ -169,8 +172,6 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         FilterDefinition $definition,
     ): Builder {
         $operator = $criterion['operator'];
-        $dateFormat = $query->getModel()->getDateFormat();
-        $driver = $query->getModel()->getConnection()->getDriverName();
 
         if ($operator === FilterOperator::IsNull) {
             return $query->whereNull($column);
@@ -186,19 +187,24 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
             return $query;
         }
 
+        $dateFormat = $query->getModel()->getDateFormat();
+        $postgresFormat = $definition->type === FilterValueType::DateTime && $query->getModel()->getConnection()->getDriverName() === 'pgsql'
+            ? $this->postgresDateTimeFormat($query, $column, $dateFormat)
+            : null;
+
         if ($operator === FilterOperator::In) {
-            return $query->whereIn($column, $this->normalizedList($criterion, $dateFormat, $driver));
+            return $query->whereIn($column, $this->normalizedList($criterion, $dateFormat, $postgresFormat));
         }
 
         if ($operator === FilterOperator::NotIn) {
-            return $query->whereNotIn($column, $this->normalizedList($criterion, $dateFormat, $driver));
+            return $query->whereNotIn($column, $this->normalizedList($criterion, $dateFormat, $postgresFormat));
         }
 
         if ($operator === FilterOperator::Between) {
-            return $query->whereBetween($column, $this->normalizedList($criterion, $dateFormat, $driver));
+            return $query->whereBetween($column, $this->normalizedList($criterion, $dateFormat, $postgresFormat));
         }
 
-        $value = $this->queryValue($criterion['value'], $dateFormat, $driver);
+        $value = $this->queryValue($criterion['value'], $dateFormat, $postgresFormat);
 
         return match ($operator) {
             FilterOperator::Equals => $query->where($column, '=', $value),
@@ -306,7 +312,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      * @return list<mixed>
      */
-    private function normalizedList(array $criterion, ?string $dateFormat = null, ?string $driver = null): array
+    private function normalizedList(array $criterion, ?string $dateFormat = null, ?string $postgresFormat = null): array
     {
         if (! is_array($criterion['value']) || ! array_is_list($criterion['value'])) {
             throw new FilterableException(
@@ -317,22 +323,43 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         }
 
         return array_map(
-            fn (mixed $item): mixed => $this->queryValue($item, $dateFormat, $driver),
+            fn (mixed $item): mixed => $this->queryValue($item, $dateFormat, $postgresFormat),
             $criterion['value'],
         );
     }
 
     /**
-     * Preserve fractional instants, match microsecond model date formats, and keep the UTC offset on PostgreSQL.
+     * Choose the PostgreSQL binding format for a date-time column from its storage type.
      *
-     * PostgreSQL reads an offset-free literal in the session time zone for timestamptz columns,
-     * so instants carry their offset there; timestamp columns ignore it.
+     * Native date/time columns receive the UTC instant with its offset, because PostgreSQL reads an
+     * offset-free literal in the session time zone for timestamptz; timestamp and date ignore the offset.
+     * Text columns receive the model date format so the literal matches the stored text. When the type
+     * is unknown, a microsecond model format is kept and other formats bind the instant with its offset.
+     *
+     * @param  Builder<*>  $query
      */
-    private function queryValue(mixed $value, ?string $dateFormat = null, ?string $driver = null): mixed
+    private function postgresDateTimeFormat(Builder $query, string $column, string $dateFormat): string
+    {
+        $model = $query->getModel();
+        $table = preg_split('/\s+as\s+/i', trim($model->getTable()))[0] ?? $model->getTable();
+        $type = ($this->columnTypes ?? app(ColumnStorageTypes::class))->typeName($model->getConnection(), $table, Str::afterLast($column, '.'));
+
+        return match (true) {
+            in_array($type, ['timestamptz', 'timestamp', 'date'], true) => 'Y-m-d H:i:s.uP',
+            in_array($type, ['text', 'varchar', 'bpchar'], true) => $dateFormat,
+            str_contains($dateFormat, 'u') => $dateFormat,
+            default => 'Y-m-d H:i:s.uP',
+        };
+    }
+
+    /**
+     * Preserve fractional instants, match microsecond model date formats, and apply the PostgreSQL column format.
+     */
+    private function queryValue(mixed $value, ?string $dateFormat = null, ?string $postgresFormat = null): mixed
     {
         if ($value instanceof DateTimeInterface) {
-            if ($driver === 'pgsql') {
-                return $value->format($dateFormat !== null && str_contains($dateFormat, 'u') ? $dateFormat : 'Y-m-d H:i:s.uP');
+            if ($postgresFormat !== null) {
+                return $value->format($postgresFormat);
             }
 
             if ($value->format('u') !== '000000') {

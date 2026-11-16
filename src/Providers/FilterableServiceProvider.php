@@ -7,6 +7,7 @@ namespace Nvl\Filterable\Providers;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\ServiceProvider;
 use Nvl\Filterable\Contracts\EloquentFilterApplierContract;
+use Nvl\Filterable\Services\ColumnStorageTypes;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Support\Globals\GlobalNames;
@@ -28,6 +29,7 @@ final class FilterableServiceProvider extends ServiceProvider
         $this->app->register(SupportServiceProvider::class);
 
         $this->app->singleton(FilterCriterionNormalizer::class);
+        $this->app->singletonIf(ColumnStorageTypes::class);
         $this->app->singletonIf(EloquentFilterApplier::class);
         $this->app->singletonIf(EloquentFilterApplierContract::class, static fn (Container $app): EloquentFilterApplierContract => $app->make(EloquentFilterApplier::class));
     }
