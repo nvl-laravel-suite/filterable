@@ -14,6 +14,7 @@ use Nvl\Filterable\Definitions\FilterSchema;
 use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
+use Nvl\Support\Contracts\TextMatcher;
 
 /**
  * Applies validated aliases without accepting raw database identifiers.
@@ -27,6 +28,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      */
     public function __construct(
         private FilterCriterionNormalizer $normalizer,
+        private ?TextMatcher $textMatcher = null,
     ) {}
 
     /**
@@ -70,9 +72,22 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         array $criterion,
         FilterDefinition $definition,
     ): void {
-        if ($definition->handler !== null) {
-            $query->where(function (Builder $nested) use ($definition, $criterion): void {
-                ($definition->handler)($nested, $criterion);
+        if ($definition->transform !== null) {
+            $transformed = ($definition->transform)(clone $query, $criterion);
+            $this->applyTransform($query, $transformed, $criterion['alias']);
+
+            return;
+        }
+        $handler = $definition->handler;
+        if ($handler !== null) {
+            $query->where(function (Builder $nested) use ($handler, $criterion): void {
+                $result = $handler($nested, $criterion);
+                if ($result instanceof Builder && $result !== $nested) {
+                    if (! $this->usesSameSource($nested, $result)) {
+                        throw new FilterableException('A filter handler must preserve its query source.', 'invalid_filter_handler', "filter.{$criterion['alias']}");
+                    }
+                    $nested->setQuery($result->getQuery());
+                }
             });
 
             return;
@@ -82,15 +97,60 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         $column = array_pop($segments);
 
         if ($segments === []) {
-            $this->applyOperator($query, $this->qualifyForQuery($query, $column), $criterion);
+            $this->applyOperator($query, $this->qualifyForQuery($query, $column), $criterion, $definition);
 
             return;
         }
 
         $query->whereHas(
             implode('.', $segments),
-            fn (Builder $related): Builder => $this->applyOperator($related, $related->qualifyColumn($column), $criterion),
+            fn (Builder $related): Builder => $this->applyOperator($related, $related->qualifyColumn($column), $criterion, $definition),
         );
+    }
+
+    /**
+     * A transform may add query clauses and ordering while retaining the caller's source and constraints.
+     *
+     * @param  Builder<*>  $query
+     * @param  Builder<*>  $result
+     */
+    private function applyTransform(Builder $query, Builder $result, string $alias): void
+    {
+        $original = $query->getQuery();
+        $transformed = $result->getQuery();
+        $whereCount = count($original->wheres);
+        $originalBindings = $original->getRawBindings()['where'];
+        $candidateBindings = $transformed->getRawBindings()['where'];
+        $valid = $this->usesSameSource($query, $result)
+            && array_slice($transformed->wheres, 0, $whereCount) === $original->wheres
+            && array_slice($candidateBindings, 0, count($originalBindings)) === $originalBindings
+            && $transformed->unions === $original->unions
+            && $transformed->joins === $original->joins
+            && $transformed->havings === $original->havings
+            && $transformed->getRawBindings()['join'] === $original->getRawBindings()['join']
+            && $transformed->getRawBindings()['having'] === $original->getRawBindings()['having']
+            && $query->removedScopes() === $result->removedScopes();
+        foreach (array_slice($transformed->wheres, $whereCount) as $clause) {
+            if (! is_array($clause) || ($clause['boolean'] ?? null) !== 'and') {
+                $valid = false;
+            }
+        }
+        if (! $valid) {
+            throw new FilterableException('A filter transform must preserve the existing query constraints and group any OR predicates.', 'invalid_filter_transform', "filter.{$alias}");
+        }
+        $query->setQuery($transformed);
+        $query->setEagerLoads($result->getEagerLoads());
+    }
+
+    /**
+     * @param  Builder<*>  $query
+     * @param  Builder<*>  $result
+     */
+    private function usesSameSource(Builder $query, Builder $result): bool
+    {
+        return $query->getModel()::class === $result->getModel()::class
+            && $query->getQuery()->from === $result->getQuery()->from
+            && $query->getQuery()->getConnection() === $result->getQuery()->getConnection();
     }
 
     /**
@@ -106,6 +166,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         Builder $query,
         string $column,
         array $criterion,
+        FilterDefinition $definition,
     ): Builder {
         $operator = $criterion['operator'];
         $dateFormat = $query->getModel()->getDateFormat();
@@ -116,6 +177,12 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
 
         if ($operator === FilterOperator::IsNotNull) {
             return $query->whereNotNull($column);
+        }
+
+        if ($definition->calendarDate) {
+            $this->whereCalendarDate($query, $column, $criterion);
+
+            return $query;
         }
 
         if ($operator === FilterOperator::In) {
@@ -135,13 +202,54 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         return match ($operator) {
             FilterOperator::Equals => $query->where($column, '=', $value),
             FilterOperator::NotEquals => $query->where($column, '!=', $value),
-            FilterOperator::Contains => $this->whereContains($query, $column, $criterion, false),
-            FilterOperator::NotContains => $this->whereContains($query, $column, $criterion, true),
+            FilterOperator::Contains => $this->whereContains($query, $column, $criterion, false, $definition->allowWildcards),
+            FilterOperator::NotContains => $this->whereContains($query, $column, $criterion, true, $definition->allowWildcards),
             FilterOperator::Before, FilterOperator::Lt => $query->where($column, '<', $value),
             FilterOperator::After, FilterOperator::Gt => $query->where($column, '>', $value),
             FilterOperator::Gte => $query->where($column, '>=', $value),
             FilterOperator::Lte => $query->where($column, '<=', $value),
         };
+    }
+
+    /**
+     * @param  Builder<*>  $query
+     * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
+     */
+    private function whereCalendarDate(Builder $query, string $column, array $criterion): void
+    {
+        $operator = $criterion['operator'];
+        if (in_array($operator, [FilterOperator::In, FilterOperator::NotIn, FilterOperator::Between], true)) {
+            $values = $this->normalizedList($criterion);
+            $query->where(static function (Builder $nested) use ($values, $operator, $column): void {
+                foreach ($values as $index => $value) {
+                    if (! is_string($value)) {
+                        throw new LogicException('Expected a normalized calendar date.');
+                    }
+                    $comparison = match ($operator) {
+                        FilterOperator::Between => $index === 0 ? '>=' : '<=',
+                        FilterOperator::NotIn => '!=',
+                        default => '=',
+                    };
+                    $nested->getQuery()->whereDate($column, $comparison, $value, $operator === FilterOperator::In ? 'or' : 'and');
+                }
+            });
+
+            return;
+        }
+        $comparison = match ($operator) {
+            FilterOperator::Equals => '=',
+            FilterOperator::NotEquals => '!=',
+            FilterOperator::Before, FilterOperator::Lt => '<',
+            FilterOperator::After, FilterOperator::Gt => '>',
+            FilterOperator::Lte => '<=',
+            FilterOperator::Gte => '>=',
+            default => throw new LogicException('Unexpected calendar date operator.'),
+        };
+        $value = $criterion['value'];
+        if (! is_string($value)) {
+            throw new LogicException('Expected a normalized calendar date.');
+        }
+        $query->getQuery()->whereDate($column, $comparison, $value);
     }
 
     /**
@@ -174,6 +282,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         string $column,
         array $criterion,
         bool $negated,
+        bool $wildcards,
     ): Builder {
         if (! is_string($criterion['value'])) {
             throw new FilterableException(
@@ -183,14 +292,11 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
             );
         }
 
-        $grammar = $query->getQuery()->getGrammar();
-        $wrapped = $grammar->wrap($column);
-        $this->ensureSafeWrappedColumn($wrapped);
-        $needle = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $criterion['value']).'%';
+        $this->ensureSafeWrappedColumn($query->getQuery()->getGrammar()->wrap($column));
+        $matcher = $this->textMatcher ?? app(TextMatcher::class);
+        $query->setQuery($matcher->contains($query->getQuery(), $column, $criterion['value'], $negated, $wildcards));
 
-        return $negated
-            ? $query->whereRaw("{$wrapped} NOT LIKE ? ESCAPE '!'", [$needle])
-            : $query->whereRaw("{$wrapped} LIKE ? ESCAPE '!'", [$needle]);
+        return $query;
     }
 
     /**
@@ -233,8 +339,6 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
 
     /**
      * Prove that a database grammar returned only a safely qualified identifier.
-     *
-     * @phpstan-assert literal-string $column
      */
     private function ensureSafeWrappedColumn(string $column): void
     {

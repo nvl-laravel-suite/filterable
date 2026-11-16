@@ -33,7 +33,8 @@ final readonly class FilterDefinition
      * @param  non-empty-string  $column
      * @param  array<array-key, mixed>  $operators
      * @param  array<array-key, mixed>  $enumValues
-     * @param  (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias:string,operator:FilterOperator,value:mixed}): \Illuminate\Database\Eloquent\Builder<*>)|null  $handler
+     * @param  (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias:string,operator:FilterOperator,value:mixed}): (\Illuminate\Database\Eloquent\Builder<*>|void))|ModelMethodHandler|null  $handler
+     * @param  (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias:string,operator:FilterOperator,value:mixed}): \Illuminate\Database\Eloquent\Builder<*>)|ModelMethodHandler|null  $transform
      * @param  int|null  $minimum  Smallest accepted integer value, for example the column's own range.
      * @param  int|null  $maximum  Largest accepted integer value.
      */
@@ -44,9 +45,12 @@ final readonly class FilterDefinition
         array $operators = [FilterOperator::Equals],
         public bool $nullable = false,
         array $enumValues = [],
-        public ?Closure $handler = null,
+        public Closure|ModelMethodHandler|null $handler = null,
         public ?int $minimum = null,
         public ?int $maximum = null,
+        public bool $allowWildcards = false,
+        public bool $calendarDate = false,
+        public Closure|ModelMethodHandler|null $transform = null,
     ) {
         if (! preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/D', $alias)) {
             throw new FilterableException(
@@ -74,6 +78,11 @@ final readonly class FilterDefinition
                 'invalid_filter_schema',
                 "filter.{$alias}.value",
             );
+        }
+
+        if (($handler !== null && $transform !== null) || ($calendarDate && $type !== FilterValueType::Date)
+            || ($allowWildcards && $type !== FilterValueType::String)) {
+            throw new FilterableException("Filter [{$alias}] has incompatible query options.", 'invalid_filter_schema', "filter.{$alias}");
         }
 
         $this->operators = $this->validatedOperators($operators);

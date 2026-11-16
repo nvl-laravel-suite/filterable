@@ -86,6 +86,8 @@ Aliases are the public contract; columns and relation paths remain internal. Dup
 
 Unknown keys, malformed entries, missing required values and all complexity bounds fail before the builder is changed. A null-check may omit `value` or supply explicit null; other supplied null values fail the declared type. Empty filters retain caller predicates. Empty sorts use the schema defaults, with its tie-breaker appended once.
 
+For existing flat endpoints, pass the query parameter array and schema to `RequestParamsAdapter::parse()`, then pass the returned `filters` and `sorts` to the applier. The adapter accepts `.operator` and `_operator` companions, CSV lists and ranges, and sort maps or comma-separated `alias:direction` pairs. Use `ignoreUnknown: true` to skip unrelated parameters such as `page`. Every known alias still enforces its operator and value rules. The legacy operator `not` maps to `not_contains`.
+
 Consumers own HTTP syntax, scalar shorthand, comma splitting, frontend types and validation response mapping. Convert request input into the native lists above, then call the same applier used by jobs and CLI. A controller can catch `FilterableException` and throw `$exception->toValidationException()` after authorization. The package ships no HTTP parser or DTO compatibility aliases.
 
 ## Model trait
@@ -106,15 +108,17 @@ Native scalar, set and range filters retain fractional seconds up to six digits 
 
 `in` and `not_in` accept native lists and reject empty or oversized sets. `between` requires exactly two values. Custom handlers receive values after the same strict type normalization and own the complete predicate for their alias. Each handler runs inside a nested `where` group, so an ordinary `orWhere` remains inside the alias predicate and cannot broaden predicates already present on the caller's query.
 
-Handlers are trusted, predicate-only callbacks. Keep them bounded and parameterized, and use them only for `where`, `orWhere`, `whereHas`, or equivalent predicate composition. Prepare joins and selected columns on the caller before filtering, and declare ordering through `SortDefinition`; query-shape mutations inside a nested handler are outside the callback contract. This grouping is a composition safeguard, not an authorization sandbox: a trusted callback can still use raw SQL or otherwise bypass application rules. Authorize the query before exposing results and test every custom handler's boundary.
+Handlers are trusted predicate callbacks. Keep them bounded and parameterized, and use them for `where`, `orWhere`, `whereHas`, or similar conditions. Use `transform` for trusted callbacks that add ordering or selection to the outer query. A transform must preserve its source, existing where clauses, joins, constraints and union, and group added OR predicates. Authorize the caller's query before applying filters.
+
+Attach `new ModelMethodHandler('filterRank')` to a declared `handler` or `transform` to use a public model method. The method receives the builder and normalized value. A declared third parameter receives the native operator string. Return the supplied builder or a builder derived from it.
 
 Sort entries contain exactly `alias` and `direction`, with direction `asc` or `desc` (or a `SortDirection` case). Duplicate and excessive sorts are rejected. When `tieBreakerSort` is declared, its ascending column is appended unless already present, which makes offset and cursor pagination deterministic.
 
 ## Database portability
 
-`contains` and `not_contains` escape `%`, `_`, and the escape character, so user input always has literal substring semantics. Case, collation, and accent behavior follows the database column and driver. If an endpoint requires a different strategy, provide a custom handler and test it on every supported driver.
+`contains` and `not_contains` use Core's `TextMatcher`. Literal matching is the default. Set `allowWildcards: true` on an alias to accept SQL `%` and `_` wildcards. The escape character `!` remains literal in either mode. Bind `Nvl\Support\Contracts\TextMatcher` to customize folding across packages.
 
-Date criteria target database DATE columns. A date comparison against a timestamp is not a whole-day predicate; use a trusted handler with explicit timezone/day boundaries for that behavior. Date-time criteria normalize to UTC, so store UTC instants and use a UTC database session for timestamp comparisons, or provide an explicit storage-aware handler. The applier does not infer a model cast's display timezone.
+Date criteria target database DATE columns by default. Set `calendarDate: true` on a Date definition to compare the date portion of timestamp values in the database session's timezone. Date-time criteria normalize to UTC. Use a trusted handler for a calendar day defined in another timezone.
 
 Negative operators retain SQL NULL semantics: `not_equals`, `not_in` and `not_contains` exclude NULL rows. Use `is_null` or a reviewed grouped custom predicate when the product needs to include missing values. A nullable definition permits explicit null checks; it does not change negative comparisons into null-inclusive predicates.
 
@@ -181,6 +185,8 @@ The table lists enum discriminators, including any successful codes retained for
 | `invalid_maximum_string_length` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_maximum_string_length` |
 | `unknown_default_sort` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.unknown_default_sort` |
 | `invalid_filter_schema` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_filter_schema` |
+| `invalid_filter_handler` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_filter_handler` |
+| `invalid_filter_transform` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_filter_transform` |
 | `invalid_default_sort` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_default_sort` |
 | `invalid_sort_alias` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_sort_alias` |
 | `invalid_sort_column` | Exception-defined; see `suggestedStatus()` | Declared safe scalar/array map; otherwise `{}` | `nvl-filterable::responsecode.invalid_sort_column` |

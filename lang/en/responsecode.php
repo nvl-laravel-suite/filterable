@@ -24,6 +24,8 @@ return [
     'invalid_maximum_string_length' => 'The requested filterable operation could not be completed.',
     'unknown_default_sort' => 'The requested filterable operation could not be completed.',
     'invalid_filter_schema' => 'The requested filterable operation could not be completed.',
+    'invalid_filter_handler' => 'The requested filterable operation could not be completed.',
+    'invalid_filter_transform' => 'The requested filterable operation could not be completed.',
     'invalid_default_sort' => 'The requested filterable operation could not be completed.',
     'invalid_sort_alias' => 'The requested filterable operation could not be completed.',
     'invalid_sort_column' => 'The requested filterable operation could not be completed.',

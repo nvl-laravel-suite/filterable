@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -15,13 +16,16 @@ use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\FilterValueType;
 use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
+use Nvl\Filterable\Input\RequestParamsAdapter;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Filterable\Tests\Fixtures\ConsumerQueryFilters;
 use Nvl\Filterable\Tests\Fixtures\FilterableGroup;
 use Nvl\Filterable\Tests\Fixtures\FilterableRecord;
+use Nvl\Support\Contracts\TextMatcher;
 
 beforeEach(function (): void {
+    Schema::dropIfExists('filterable_microsecond_records');
     Schema::dropIfExists('filterable_records');
     Schema::dropIfExists('filterable_groups');
 
@@ -89,8 +93,73 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
+    Schema::dropIfExists('filterable_microsecond_records');
     Schema::dropIfExists('filterable_records');
     Schema::dropIfExists('filterable_groups');
+});
+
+it('parses flat aliases operators range lists and both sort formats with the native allowlist', function (): void {
+    $schema = new FilterSchema([
+        new FilterDefinition('price', 'price', FilterValueType::Integer, [FilterOperator::Between]),
+        new FilterDefinition('state', 'status', operators: [FilterOperator::In]),
+        new FilterDefinition('label', 'name', operators: [FilterOperator::NotContains]),
+    ], [new SortDefinition('item_name', 'name')]);
+    $adapter = app(RequestParamsAdapter::class);
+    $applier = app(EloquentFilterApplier::class);
+    $params = ['price' => '10,30', 'price.operator' => 'between', 'state' => '"active","draft"', 'state_operator' => 'in'];
+    $nativeFilters = [
+        ['alias' => 'price', 'operator' => 'between', 'value' => [10, 30]],
+        ['alias' => 'state', 'operator' => 'in', 'value' => ['active', 'draft']],
+    ];
+    $native = $applier->apply(FilterableRecord::query(), $schema, $nativeFilters, [['alias' => 'item_name', 'direction' => 'desc']])->pluck('name')->all();
+
+    foreach ([['itemName' => 'DESC'], 'itemName:desc'] as $sort) {
+        $input = $adapter->parse([...$params, 'sort' => $sort, 'page' => 2], $schema, ignoreUnknown: true);
+        expect($applier->apply(FilterableRecord::query(), $schema, $input->filters, $input->sorts)->pluck('name')->all())->toBe($native);
+    }
+    expect($native)->toBe(['Gamma', 'Beta', 'Alpha'])
+        ->and(fn () => $adapter->parse([...$params, 'page' => 2], $schema))->toThrow(FilterableException::class, 'Unknown')
+        ->and(fn () => $adapter->parse(['price' => '10,30', 'price_operator' => 'in'], $schema, ignoreUnknown: true))->toThrow(FilterableException::class, 'not allowed')
+        ->and($adapter->parse(['label' => 'Alpha', 'label_operator' => 'not'], $schema)->filters[0]['operator'])->toBe(FilterOperator::NotContains);
+});
+
+it('compares calendar dates against timestamp columns without relying on midnight', function (): void {
+    $schema = new FilterSchema([
+        new FilterDefinition('day', 'occurred_at', FilterValueType::Date, [FilterOperator::Equals, FilterOperator::Before, FilterOperator::After, FilterOperator::Between], calendarDate: true),
+    ], [new SortDefinition('name', 'name')], defaultSorts: ['name']);
+    $names = static fn (FilterOperator $operator, string|array $value): array => app(EloquentFilterApplier::class)
+        ->apply(FilterableRecord::query(), $schema, [['alias' => 'day', 'operator' => $operator, 'value' => $value]])->pluck('name')->all();
+
+    expect($names(FilterOperator::Equals, '2026-01-02'))->toBe(['Beta'])
+        ->and($names(FilterOperator::Before, '2026-01-02'))->toBe(['Alpha'])
+        ->and($names(FilterOperator::After, '2026-01-02'))->toBe(['Gamma'])
+        ->and($names(FilterOperator::Between, ['2026-01-01', '2026-01-02']))->toBe(['Alpha', 'Beta']);
+});
+
+it('matches Cyrillic and Greek folded text with declared wildcard policies', function (): void {
+    FilterableRecord::query()->whereKey(1)->update(['note' => 'СНИМКА %_! ΌΣ']);
+    FilterableRecord::query()->whereKey(2)->update(['note' => 'СНИМКА abc! ΌΣ']);
+    $schema = new FilterSchema([
+        new FilterDefinition('literal', 'note', operators: [FilterOperator::Contains, FilterOperator::NotContains]),
+        new FilterDefinition('pattern', 'note', operators: [FilterOperator::Contains], allowWildcards: true),
+    ], [new SortDefinition('name', 'name')], defaultSorts: ['name']);
+    $names = static fn (string $alias, string $value, FilterOperator $operator = FilterOperator::Contains): array => app(EloquentFilterApplier::class)
+        ->apply(FilterableRecord::query(), $schema, [['alias' => $alias, 'operator' => $operator, 'value' => $value]])->pluck('name')->all();
+
+    expect($names('literal', 'снимка %_! ός'))->toBe(['Alpha'])
+        ->and($names('literal', 'снимка %_! ός', FilterOperator::NotContains))->toBe(['Beta', 'Gamma'])
+        ->and($names('pattern', 'снимка %_! ός'))->toBe(['Alpha', 'Beta']);
+});
+
+it('lets the host substitute the Core matcher for Filterable predicates', function (): void {
+    $matcher = Mockery::mock(TextMatcher::class);
+    $matcher->shouldReceive('contains')->once()->with(Mockery::type(QueryBuilder::class), 'note', 'example', true, true)
+        ->andReturnUsing(static fn (QueryBuilder $query): QueryBuilder => $query->where('id', 3));
+    app()->instance(TextMatcher::class, $matcher);
+    $schema = new FilterSchema([new FilterDefinition('note', 'note', operators: [FilterOperator::NotContains], allowWildcards: true)], []);
+    $ids = app(EloquentFilterApplier::class)->apply(FilterableRecord::query(), $schema, [['alias' => 'note', 'operator' => 'not_contains', 'value' => 'example']])->pluck('id')->all();
+
+    expect($ids)->toBe([3]);
 });
 
 it('applies typed allowlisted filters and enum-backed sorts', function (): void {

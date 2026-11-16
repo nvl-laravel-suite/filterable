@@ -9,12 +9,15 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Filterable\Contracts\EloquentFilterApplierContract`
 - `Nvl\Filterable\Definitions\FilterDefinition`
 - `Nvl\Filterable\Definitions\FilterSchema`
+- `Nvl\Filterable\Definitions\ModelMethodHandler`
 - `Nvl\Filterable\Definitions\SortDefinition`
 - `Nvl\Filterable\Enums\FilterOperator`
 - `Nvl\Filterable\Enums\FilterValueType`
 - `Nvl\Filterable\Enums\FilterableResponseCode`
 - `Nvl\Filterable\Enums\SortDirection`
 - `Nvl\Filterable\Exceptions\FilterableException`
+- `Nvl\Filterable\Input\FilterInput`
+- `Nvl\Filterable\Input\RequestParamsAdapter`
 - `Nvl\Filterable\Services\EloquentFilterApplier`
 - `Nvl\Filterable\Traits\Filterable`
 
@@ -38,24 +41,28 @@ template Nvl\Filterable\Contracts\EloquentFilterApplierContract::TModel of Illum
 
 ```text
 final readonly class Nvl\Filterable\Definitions\FilterDefinition
-public function __construct(string $alias, string $column, Nvl\Filterable\Enums\FilterValueType $type=\Nvl\Filterable\Enums\FilterValueType::String, array $operators=[\Nvl\Filterable\Enums\FilterOperator::Equals], bool $nullable=false, array $enumValues=[], ?Closure $handler=null, ?int $minimum=null, ?int $maximum=null): mixed
+public function __construct(string $alias, string $column, Nvl\Filterable\Enums\FilterValueType $type=\Nvl\Filterable\Enums\FilterValueType::String, array $operators=[\Nvl\Filterable\Enums\FilterOperator::Equals], bool $nullable=false, array $enumValues=[], Closure|Nvl\Filterable\Definitions\ModelMethodHandler|null $handler=null, ?int $minimum=null, ?int $maximum=null, bool $allowWildcards=false, bool $calendarDate=false, Closure|Nvl\Filterable\Definitions\ModelMethodHandler|null $transform=null): mixed
 @param non-empty-string $alias
 @param non-empty-string $column
 @param array<array-key, mixed> $operators
 @param array<array-key, mixed> $enumValues
-@param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): \Illuminate\Database\Eloquent\Builder<*> | null) $handler
-resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): Illuminate\Database\Eloquent\Builder<*> | null) $handler
+@param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): (\Illuminate\Database\Eloquent\Builder<*> | void) | ModelMethodHandler | null) $handler
+resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): (Illuminate\Database\Eloquent\Builder<*> | void) | Nvl\Filterable\Definitions\ModelMethodHandler | null) $handler
+@param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): \Illuminate\Database\Eloquent\Builder<*> | ModelMethodHandler | null) $transform
+resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): Illuminate\Database\Eloquent\Builder<*> | Nvl\Filterable\Definitions\ModelMethodHandler | null) $transform
 @param (int | null) $minimum
 @param (int | null) $maximum
 public readonly string $alias
 @param non-empty-string $alias
+public readonly bool $allowWildcards
+public readonly bool $calendarDate
 public readonly string $column
 @param non-empty-string $column
 public readonly array $enumValues
 @var list<string>
-public readonly ?Closure $handler
-@param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): \Illuminate\Database\Eloquent\Builder<*> | null) $handler
-resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): Illuminate\Database\Eloquent\Builder<*> | null) $handler
+public readonly Closure|Nvl\Filterable\Definitions\ModelMethodHandler|null $handler
+@param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): (\Illuminate\Database\Eloquent\Builder<*> | void) | ModelMethodHandler | null) $handler
+resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): (Illuminate\Database\Eloquent\Builder<*> | void) | Nvl\Filterable\Definitions\ModelMethodHandler | null) $handler
 public readonly ?int $maximum
 @param (int | null) $maximum
 public readonly ?int $minimum
@@ -64,6 +71,9 @@ public readonly bool $nullable
 public readonly array $operators
 @var list<FilterOperator>
 resolved @var list<Nvl\Filterable\Enums\FilterOperator>
+public readonly Closure|Nvl\Filterable\Definitions\ModelMethodHandler|null $transform
+@param (Closure(\Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: FilterOperator, value: mixed}): \Illuminate\Database\Eloquent\Builder<*> | ModelMethodHandler | null) $transform
+resolved @param (Closure(Illuminate\Database\Eloquent\Builder<*>, array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed}): Illuminate\Database\Eloquent\Builder<*> | Nvl\Filterable\Definitions\ModelMethodHandler | null) $transform
 public readonly Nvl\Filterable\Enums\FilterValueType $type
 ```
 
@@ -90,6 +100,24 @@ public readonly array $sorts
 @var list<SortDefinition>
 resolved @var list<Nvl\Filterable\Definitions\SortDefinition>
 public readonly ?string $tieBreakerSort
+```
+
+## Nvl\Filterable\Definitions\ModelMethodHandler
+
+```text
+final readonly class Nvl\Filterable\Definitions\ModelMethodHandler
+public function __construct(string $method): mixed
+public function __invoke(Illuminate\Database\Eloquent\Builder $query, array $criterion): Illuminate\Database\Eloquent\Builder
+@template TModel of Model
+resolved @template TModel of Illuminate\Database\Eloquent\Model
+@param Builder<TModel> $query
+resolved @param Illuminate\Database\Eloquent\Builder<TModel> $query
+@param array{alias: string, operator: FilterOperator, value: mixed} $criterion
+resolved @param array{alias: string, operator: Nvl\Filterable\Enums\FilterOperator, value: mixed} $criterion
+@return Builder<*>
+resolved @return Illuminate\Database\Eloquent\Builder<*>
+template Nvl\Filterable\Definitions\ModelMethodHandler::TModel of Illuminate\Database\Eloquent\Model
+public readonly string $method
 ```
 
 ## Nvl\Filterable\Definitions\SortDefinition
@@ -176,9 +204,11 @@ public const Nvl\Filterable\Enums\FilterableResponseCode InvalidEnumValues=Nvl\F
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilter=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilter="invalid_filter"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterAlias=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterAlias="invalid_filter_alias"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterColumn=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterColumn="invalid_filter_column"
+public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterHandler=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterHandler="invalid_filter_handler"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterOperators=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterOperators="invalid_filter_operators"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterSchema=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterSchema="invalid_filter_schema"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterShape=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterShape="invalid_filter_shape"
+public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterTransform=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterTransform="invalid_filter_transform"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterValue=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterValue="invalid_filter_value"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidFilterValueShape=Nvl\Filterable\Enums\FilterableResponseCode::InvalidFilterValueShape="invalid_filter_value_shape"
 public const Nvl\Filterable\Enums\FilterableResponseCode InvalidIntegerFilterValue=Nvl\Filterable\Enums\FilterableResponseCode::InvalidIntegerFilterValue="invalid_integer_filter_value"
@@ -245,11 +275,35 @@ public readonly string $errorCode
 public readonly string $path
 ```
 
+## Nvl\Filterable\Input\FilterInput
+
+```text
+final readonly class Nvl\Filterable\Input\FilterInput
+public function __construct(array $filters, array $sorts): mixed
+@param list<array{alias: string, operator: (FilterOperator | string), value?: mixed}> $filters
+resolved @param list<array{alias: string, operator: (Nvl\Filterable\Enums\FilterOperator | string), value?: mixed}> $filters
+@param list<array{alias: string, direction: string}> $sorts
+public readonly array $filters
+@param list<array{alias: string, operator: (FilterOperator | string), value?: mixed}> $filters
+resolved @param list<array{alias: string, operator: (Nvl\Filterable\Enums\FilterOperator | string), value?: mixed}> $filters
+public readonly array $sorts
+@param list<array{alias: string, direction: string}> $sorts
+```
+
+## Nvl\Filterable\Input\RequestParamsAdapter
+
+```text
+final readonly class Nvl\Filterable\Input\RequestParamsAdapter
+public function __construct(Nvl\Filterable\Services\FilterCriterionNormalizer $normalizer): mixed
+public function parse(array $params, Nvl\Filterable\Definitions\FilterSchema $schema, bool $ignoreUnknown=false): Nvl\Filterable\Input\FilterInput
+@param array<array-key, mixed> $params
+```
+
 ## Nvl\Filterable\Services\EloquentFilterApplier
 
 ```text
 final readonly class Nvl\Filterable\Services\EloquentFilterApplier implements Nvl\Filterable\Contracts\EloquentFilterApplierContract
-public function __construct(Nvl\Filterable\Services\FilterCriterionNormalizer $normalizer): mixed
+public function __construct(Nvl\Filterable\Services\FilterCriterionNormalizer $normalizer, ?Nvl\Support\Contracts\TextMatcher $textMatcher=null): mixed
 public function apply(Illuminate\Database\Eloquent\Builder $query, Nvl\Filterable\Definitions\FilterSchema $schema, array $filters=[], array $sorts=[]): Illuminate\Database\Eloquent\Builder
 @template TModel of Model
 resolved @template TModel of Illuminate\Database\Eloquent\Model

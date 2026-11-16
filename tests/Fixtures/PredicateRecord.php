@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Filterable\Tests\Fixtures;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -20,4 +21,12 @@ final class PredicateRecord extends Model
     protected $table = 'predicate_records';
 
     protected $guarded = [];
+
+    /** @param Builder<self> $query
+     * @return Builder<self>
+     */
+    public function filterRank(Builder $query, string $direction, ?string $operator = null): Builder
+    {
+        return (clone $query)->orderBy('name', $operator === 'equals' ? $direction : 'asc');
+    }
 }

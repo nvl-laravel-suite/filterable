@@ -7,9 +7,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Nvl\Filterable\Definitions\FilterDefinition;
 use Nvl\Filterable\Definitions\FilterSchema;
+use Nvl\Filterable\Definitions\ModelMethodHandler;
 use Nvl\Filterable\Definitions\SortDefinition;
 use Nvl\Filterable\Enums\FilterOperator;
 use Nvl\Filterable\Enums\SortDirection;
+use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Tests\Fixtures\NullablePredicateRecord;
 use Nvl\Filterable\Tests\Fixtures\PredicateGroup;
@@ -53,6 +55,28 @@ afterEach(function (): void {
     Schema::dropIfExists('nullable_predicate_records');
     Schema::dropIfExists('predicate_records');
     Schema::dropIfExists('predicate_groups');
+});
+
+it('uses a declared model method to return an ordered query and preserves caller constraints', function (): void {
+    PredicateRecord::query()->insert([
+        ['owner' => 'a', 'name' => 'alpha'], ['owner' => 'a', 'name' => 'bravo'], ['owner' => 'b', 'name' => 'charlie'],
+    ]);
+    $schema = new FilterSchema([
+        new FilterDefinition('rank', 'name', transform: new ModelMethodHandler('filterRank')),
+    ], []);
+    $applier = app(EloquentFilterApplier::class);
+    $filters = [['alias' => 'rank', 'operator' => 'equals', 'value' => 'desc']];
+
+    expect($applier->apply(PredicateRecord::query()->where('owner', 'a'), $schema, $filters)->pluck('name')->all())->toBe(['bravo', 'alpha']);
+    foreach ([
+        static fn (Builder $query): Builder => $query->orWhere('owner', 'b'),
+        static fn (): Builder => PredicateRecord::query(),
+    ] as $unsafe) {
+        $query = PredicateRecord::query()->where('owner', 'a');
+        $schema = new FilterSchema([new FilterDefinition('rank', 'name', transform: $unsafe)], []);
+        expect(fn () => $applier->apply($query, $schema, $filters))->toThrow(FilterableException::class, 'preserve')
+            ->and($query->orderBy('name')->pluck('name')->all())->toBe(['alpha', 'bravo']);
+    }
 });
 
 test('custom OR filter preserves the caller ownership predicate', function (string $owner): void {

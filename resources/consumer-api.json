@@ -22,6 +22,8 @@
             ],
             "properties": [
                 "alias",
+                "allowWildcards",
+                "calendarDate",
                 "column",
                 "enumValues",
                 "handler",
@@ -29,6 +31,7 @@
                 "minimum",
                 "nullable",
                 "operators",
+                "transform",
                 "type"
             ],
             "constants": []
@@ -50,6 +53,18 @@
                 "maximumValuesPerFilter",
                 "sorts",
                 "tieBreakerSort"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Definitions\\ModelMethodHandler": {
+            "kind": "class",
+            "file": "src/Definitions/ModelMethodHandler.php",
+            "methods": [
+                "__construct",
+                "__invoke"
+            ],
+            "properties": [
+                "method"
             ],
             "constants": []
         },
@@ -153,9 +168,11 @@
                 "InvalidFilter",
                 "InvalidFilterAlias",
                 "InvalidFilterColumn",
+                "InvalidFilterHandler",
                 "InvalidFilterOperators",
                 "InvalidFilterSchema",
                 "InvalidFilterShape",
+                "InvalidFilterTransform",
                 "InvalidFilterValue",
                 "InvalidFilterValueShape",
                 "InvalidIntegerFilterValue",
@@ -219,6 +236,28 @@
                 "errorCode",
                 "path"
             ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Input\\FilterInput": {
+            "kind": "class",
+            "file": "src/Input/FilterInput.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "filters",
+                "sorts"
+            ],
+            "constants": []
+        },
+        "Nvl\\Filterable\\Input\\RequestParamsAdapter": {
+            "kind": "class",
+            "file": "src/Input/RequestParamsAdapter.php",
+            "methods": [
+                "__construct",
+                "parse"
+            ],
+            "properties": [],
             "constants": []
         },
         "Nvl\\Filterable\\Services\\EloquentFilterApplier": {

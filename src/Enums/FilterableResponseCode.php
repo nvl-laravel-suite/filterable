@@ -34,6 +34,8 @@ enum FilterableResponseCode: string implements ResponseCode
     case InvalidMaximumStringLength = 'invalid_maximum_string_length';
     case UnknownDefaultSort = 'unknown_default_sort';
     case InvalidFilterSchema = 'invalid_filter_schema';
+    case InvalidFilterHandler = 'invalid_filter_handler';
+    case InvalidFilterTransform = 'invalid_filter_transform';
     case InvalidDefaultSort = 'invalid_default_sort';
     case InvalidSortAlias = 'invalid_sort_alias';
     case InvalidSortColumn = 'invalid_sort_column';

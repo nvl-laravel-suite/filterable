@@ -40,7 +40,7 @@ Choose complexity bounds appropriate to the endpoint before receiving input.
 Filters and sorts are lists, including when only one entry is supplied.
 A filter is `array{alias:string,operator:FilterOperator|string,value?:mixed}`.
 A sort is `array{alias:string,direction:'asc'|'desc'}`.
-All keys are exact; HTTP scalar shorthand, comma splitting and DTO mapping belong to the host.
+All keys are exact. Hosts with flat query parameters can opt into `RequestParamsAdapter` and pass its native lists to the applier.
 Omitted or explicit null values are valid only for declared null checks, which require `nullable: true`.
 `in`/`not_in` require scalar lists; `between` requires exactly two values.
 Empty sorts select schema defaults and append the tie-breaker once.
@@ -49,9 +49,9 @@ Unknown keys, aliases, operators, malformed values and excessive complexity fail
 ## Query guarantees
 
 Preserve the caller's visibility and ownership predicates before applying filters.
-Relation filters use declared paths; contains predicates escape wildcard characters as literal text.
+Relation filters use declared paths. Contains predicates use Core's `TextMatcher` and treat wildcards literally by default. Set `allowWildcards: true` on a declared alias to permit `%` and `_`.
 Datetime input normalizes valid instants to UTC; permissive PHP parsing is not the contract.
-Custom handlers receive a nested builder and normalized criterion.
+Custom handlers receive a nested builder and normalized criterion. Use a declared `transform` for outer ordering or selection. Use `ModelMethodHandler` to call a fixed public model method.
 Keep handler predicates grouped and SQL parameterized; trusted callbacks remain host code.
 The service mutates/returns a builder and does not execute or authorize the final query.
 It supplies no transaction, revision, idempotency or event workflow because it performs no writes.
