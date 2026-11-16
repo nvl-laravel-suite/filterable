@@ -1,5 +1,9 @@
 # Upgrading NVL Filterable
 
+## Unreleased: PostgreSQL date-time bindings
+
+Date-time filter values are now bound as `Y-m-d H:i:s.uP` UTC instants on PostgreSQL. `timestamptz` columns therefore match the requested instant even when the session time zone is not UTC. `timestamp` columns ignore the offset and keep comparing UTC wall times. A consumer that asserted exact offset-free PostgreSQL bindings, or filters a text column with the default date format, should expect the `+00:00` suffix; declare a model date format containing `u` to keep a custom text representation. Such a format is bound as declared, so on a `timestamptz` column include an offset (`Y-m-d H:i:s.uP`). SQLite bindings are unchanged.
+
 ## Native Light API
 
 The package targets PHP 8.4, Laravel 13 and the coordinated NVL 7.x family. Upgrade the selected dependency closure together.

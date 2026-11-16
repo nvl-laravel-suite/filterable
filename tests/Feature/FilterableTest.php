@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Nvl\Filterable\Definitions\FilterDefinition;
@@ -305,6 +306,10 @@ it('preserves fractional date-time query bindings and caller predicates', functi
         [['alias' => 'occurred', 'operator' => $operator, 'value' => $value]],
     );
 
+    if ($query->getConnection()->getDriverName() === 'pgsql') {
+        $expectedBindings = array_map(static fn (string $binding): string => $binding.'+00:00', $expectedBindings);
+    }
+
     expect($query->pluck('id')->all())->toBe($expectedIds)
         ->and($query->getConnection()->prepareBindings($query->getBindings()))->toBe([1, ...$expectedBindings]);
 })->with([
@@ -313,6 +318,50 @@ it('preserves fractional date-time query bindings and caller predicates', functi
     'inclusive range' => [FilterOperator::Between, ['2026-01-01T10:00:00.123455Z', '2026-01-01T10:00:00.123457Z'], [1], ['2026-01-01 10:00:00.123455', '2026-01-01 10:00:00.123457']],
     'before a fractional instant' => [FilterOperator::Before, '2026-01-01T10:00:00.123457Z', [1], ['2026-01-01 10:00:00.123457']],
     'after a fractional instant' => [FilterOperator::After, '2026-01-01T10:00:00.123457Z', [3], ['2026-01-01 10:00:00.123457']],
+]);
+
+it('matches timestamptz instants independently of session timezone', function (FilterOperator $operator, mixed $value, array $expectedIds): void {
+    $connection = DB::connection();
+    if ($connection->getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Session time zones apply only to native PostgreSQL timestamptz columns.');
+    }
+
+    Schema::dropIfExists('filterable_instant_records');
+    Schema::create('filterable_instant_records', function (Blueprint $table): void {
+        $table->id();
+        $table->timestampTz('occurred_at', 6);
+    });
+    $connection->table('filterable_instant_records')->insert([
+        ['id' => 1, 'occurred_at' => '2026-01-01 12:00:00+00:00'],
+        ['id' => 2, 'occurred_at' => '2026-01-01 12:00:00.123456+00:00'],
+        ['id' => 3, 'occurred_at' => '2026-10-25 00:30:00+00:00'],
+        ['id' => 4, 'occurred_at' => '2026-10-25 01:30:00+00:00'],
+    ]);
+    $connection->statement("SET TIME ZONE 'Europe/Sofia'");
+    $model = new class extends Model
+    {
+        public $timestamps = false;
+
+        protected $table = 'filterable_instant_records';
+    };
+    $schema = new FilterSchema([new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [$operator])], [new SortDefinition('id', 'id')]);
+
+    try {
+        expect(app(EloquentFilterApplier::class)->apply($model->newQuery(), $schema, [['alias' => 'occurred', 'operator' => $operator, 'value' => $value]], [['alias' => 'id', 'direction' => SortDirection::Asc]])->pluck('id')->all())
+            ->toBe($expectedIds);
+    } finally {
+        $connection->statement('SET TIME ZONE UTC');
+        Schema::dropIfExists('filterable_instant_records');
+    }
+})->with([
+    'equality' => [FilterOperator::Equals, '2026-01-01T12:00:00Z', [1]],
+    'equality with fraction' => [FilterOperator::Equals, '2026-01-01T14:00:00.123456+02:00', [2]],
+    'range' => [FilterOperator::Between, ['2026-01-01T11:59:59Z', '2026-01-01T12:00:00.000001Z'], [1]],
+    'range with fractions' => [FilterOperator::Between, ['2026-01-01T12:00:00.000001Z', '2026-01-01T12:00:00.123456Z'], [2]],
+    'set membership' => [FilterOperator::In, ['2026-01-01T12:00:00Z', '2026-01-01T12:00:00.123456Z'], [1, 2]],
+    'first repeated DST hour' => [FilterOperator::Equals, '2026-10-25T03:30:00+03:00', [3]],
+    'second repeated DST hour' => [FilterOperator::Equals, '2026-10-25T03:30:00+02:00', [4]],
+    'after the repeated DST hour' => [FilterOperator::After, '2026-10-25T00:30:00Z', [4]],
 ]);
 
 it('retains normalized Carbon instants for date-time custom handlers', function (): void {

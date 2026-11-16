@@ -170,6 +170,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
     ): Builder {
         $operator = $criterion['operator'];
         $dateFormat = $query->getModel()->getDateFormat();
+        $driver = $query->getModel()->getConnection()->getDriverName();
 
         if ($operator === FilterOperator::IsNull) {
             return $query->whereNull($column);
@@ -186,18 +187,18 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         }
 
         if ($operator === FilterOperator::In) {
-            return $query->whereIn($column, $this->normalizedList($criterion, $dateFormat));
+            return $query->whereIn($column, $this->normalizedList($criterion, $dateFormat, $driver));
         }
 
         if ($operator === FilterOperator::NotIn) {
-            return $query->whereNotIn($column, $this->normalizedList($criterion, $dateFormat));
+            return $query->whereNotIn($column, $this->normalizedList($criterion, $dateFormat, $driver));
         }
 
         if ($operator === FilterOperator::Between) {
-            return $query->whereBetween($column, $this->normalizedList($criterion, $dateFormat));
+            return $query->whereBetween($column, $this->normalizedList($criterion, $dateFormat, $driver));
         }
 
-        $value = $this->queryValue($criterion['value'], $dateFormat);
+        $value = $this->queryValue($criterion['value'], $dateFormat, $driver);
 
         return match ($operator) {
             FilterOperator::Equals => $query->where($column, '=', $value),
@@ -305,7 +306,7 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      * @param  array{alias: string, operator: FilterOperator, value: mixed}  $criterion
      * @return list<mixed>
      */
-    private function normalizedList(array $criterion, ?string $dateFormat = null): array
+    private function normalizedList(array $criterion, ?string $dateFormat = null, ?string $driver = null): array
     {
         if (! is_array($criterion['value']) || ! array_is_list($criterion['value'])) {
             throw new FilterableException(
@@ -316,15 +317,24 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
         }
 
         return array_map(
-            fn (mixed $item): mixed => $this->queryValue($item, $dateFormat),
+            fn (mixed $item): mixed => $this->queryValue($item, $dateFormat, $driver),
             $criterion['value'],
         );
     }
 
-    /** Preserve fractional instants and match microsecond model date formats on SQLite. */
-    private function queryValue(mixed $value, ?string $dateFormat = null): mixed
+    /**
+     * Preserve fractional instants, match microsecond model date formats, and keep the UTC offset on PostgreSQL.
+     *
+     * PostgreSQL reads an offset-free literal in the session time zone for timestamptz columns,
+     * so instants carry their offset there; timestamp columns ignore it.
+     */
+    private function queryValue(mixed $value, ?string $dateFormat = null, ?string $driver = null): mixed
     {
         if ($value instanceof DateTimeInterface) {
+            if ($driver === 'pgsql') {
+                return $value->format($dateFormat !== null && str_contains($dateFormat, 'u') ? $dateFormat : 'Y-m-d H:i:s.uP');
+            }
+
             if ($value->format('u') !== '000000') {
                 return $value->format('Y-m-d H:i:s.u');
             }

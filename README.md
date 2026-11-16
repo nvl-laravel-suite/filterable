@@ -98,7 +98,7 @@ A host model may use `Nvl\Filterable\Traits\Filterable` and implement `filterSch
 
 Supported value types are boolean, integer, decimal, string, enum, date, and date-time. Set and range behavior comes from `in`, `not_in`, and `between`.
 
-Numeric strings, date-times, aliases and database paths must match their complete declared syntax; trailing newlines are rejected. Date-time timezone offsets require valid hours (`00`–`23`) and minutes (`00`–`59`) before conversion to UTC.
+Numeric strings, date-times, aliases and database paths must match their complete declared syntax; trailing newlines are rejected. Date-time timezone offsets require valid hours (`00`–`23`) and minutes (`00`–`59`) before conversion to UTC. On PostgreSQL the UTC instant is bound with its `+00:00` offset, so `timestamptz` columns compare correctly under any session time zone; `timestamp` columns ignore the offset. A model date format containing microseconds (`u`) is used as declared instead, because it describes text storage; on a `timestamptz` column such a format must include an offset (for example `Y-m-d H:i:s.uP`), or comparisons depend on the session time zone.
 
 Supported operators are `equals`, `not_equals`, `contains`, `not_contains`, `in`, `not_in`, `between`, `before`, `after`, `gt`, `lt`, `gte`, `lte`, `is_null`, and `is_not_null`. A definition must explicitly allow each operator, and schema construction rejects operators that do not apply to the definition's value type.
 
