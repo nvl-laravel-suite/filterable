@@ -5,9 +5,17 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.2.0] - 2026-11-17
+
 ### Fixed
 
 - Bind date-time filter instants with their UTC offset on PostgreSQL (`Y-m-d H:i:s.uP`), so `timestamptz` columns match the same instant regardless of the session time zone, including the repeated DST hour. SQLite bindings and models whose date format declares microseconds keep their existing format.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- implement the Final spec audit for one release
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.1.0] - 2026-11-16
 
