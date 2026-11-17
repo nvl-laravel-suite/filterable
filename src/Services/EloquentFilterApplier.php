@@ -26,6 +26,11 @@ use Nvl\Support\Contracts\TextMatcher;
 final readonly class EloquentFilterApplier implements EloquentFilterApplierContract
 {
     /**
+     * Laravel's default model date format on the supported grammars.
+     */
+    private const string DEFAULT_DATE_FORMAT = 'Y-m-d H:i:s';
+
+    /**
      * Create an Eloquent filter applier.
      */
     public function __construct(
@@ -333,8 +338,9 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
      *
      * Native date/time columns receive the UTC instant with its offset, because PostgreSQL reads an
      * offset-free literal in the session time zone for timestamptz; timestamp and date ignore the offset.
-     * Text columns receive the model date format so the literal matches the stored text. When the type
-     * is unknown, a microsecond model format is kept and other formats bind the instant with its offset.
+     * Text, numeric and other non-temporal columns receive the model date format (for example `U`) so the
+     * literal matches the stored value. When the type is unknown, a custom model format is kept and the
+     * default format binds the instant with its offset.
      *
      * @param  Builder<*>  $query
      */
@@ -346,14 +352,14 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
 
         return match (true) {
             in_array($type, ['timestamptz', 'timestamp', 'date'], true) => 'Y-m-d H:i:s.uP',
-            in_array($type, ['text', 'varchar', 'bpchar'], true) => $dateFormat,
-            str_contains($dateFormat, 'u') => $dateFormat,
+            $type !== null => $dateFormat,
+            $dateFormat !== self::DEFAULT_DATE_FORMAT => $dateFormat,
             default => 'Y-m-d H:i:s.uP',
         };
     }
 
     /**
-     * Preserve fractional instants, match microsecond model date formats, and apply the PostgreSQL column format.
+     * Apply the PostgreSQL column format or a custom model date format, and preserve fractional default instants.
      */
     private function queryValue(mixed $value, ?string $dateFormat = null, ?string $postgresFormat = null): mixed
     {
@@ -362,12 +368,12 @@ final readonly class EloquentFilterApplier implements EloquentFilterApplierContr
                 return $value->format($postgresFormat);
             }
 
-            if ($value->format('u') !== '000000') {
-                return $value->format('Y-m-d H:i:s.u');
+            if ($dateFormat !== null && $dateFormat !== self::DEFAULT_DATE_FORMAT) {
+                return $value->format($dateFormat);
             }
 
-            if ($dateFormat !== null && str_contains($dateFormat, 'u')) {
-                return $value->format($dateFormat);
+            if ($value->format('u') !== '000000') {
+                return $value->format('Y-m-d H:i:s.u');
             }
         }
 

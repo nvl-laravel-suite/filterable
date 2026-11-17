@@ -18,6 +18,7 @@ use Nvl\Filterable\Enums\FilterValueType;
 use Nvl\Filterable\Enums\SortDirection;
 use Nvl\Filterable\Exceptions\FilterableException;
 use Nvl\Filterable\Input\RequestParamsAdapter;
+use Nvl\Filterable\Services\ColumnStorageTypes;
 use Nvl\Filterable\Services\EloquentFilterApplier;
 use Nvl\Filterable\Services\FilterCriterionNormalizer;
 use Nvl\Filterable\Tests\Fixtures\ConsumerQueryFilters;
@@ -1019,4 +1020,157 @@ it('caches the date-time column storage type between filters', function (): void
 
     expect($first)->toBe($connection->getDriverName() === 'pgsql' ? 2 : 1)
         ->and($second)->toBe(1);
+});
+
+it('resolves column storage types per table prefix', function (): void {
+    $connection = DB::connection();
+    $prefix = $connection->getTablePrefix();
+    Schema::create('alpha_filterable_storage_events', fn (Blueprint $table) => $table->timestamp('occurred_at'));
+    Schema::create('beta_filterable_storage_events', fn (Blueprint $table) => $table->string('occurred_at'));
+    $types = new ColumnStorageTypes;
+
+    try {
+        $connection->setTablePrefix($prefix.'alpha_');
+        $alpha = $types->typeName($connection, 'filterable_storage_events', 'occurred_at');
+        $connection->setTablePrefix($prefix.'beta_');
+        $beta = $types->typeName($connection, 'filterable_storage_events', 'occurred_at');
+    } finally {
+        $connection->setTablePrefix($prefix);
+        Schema::dropIfExists('alpha_filterable_storage_events');
+        Schema::dropIfExists('beta_filterable_storage_events');
+    }
+
+    expect($alpha)->not->toBe('varchar')
+        ->and($beta)->toBe('varchar');
+});
+
+it('resolves PostgreSQL column storage types by exact column name', function (): void {
+    $connection = DB::connection();
+    if ($connection->getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Only PostgreSQL keeps columns whose names differ only in case.');
+    }
+
+    Schema::create('filterable_case_events', function (Blueprint $table): void {
+        $table->string('Occurred_At');
+        $table->timestampTz('occurred_at');
+    });
+    $types = new ColumnStorageTypes;
+
+    try {
+        expect($types->typeName($connection, 'filterable_case_events', 'occurred_at'))->toBe('timestamptz')
+            ->and($types->typeName($connection, 'filterable_case_events', 'Occurred_At'))->toBe('varchar');
+    } finally {
+        Schema::dropIfExists('filterable_case_events');
+    }
+});
+
+it('binds date-time filters in a custom model date format', function (string $format, string $storage, FilterOperator $operator, mixed $value, array $expectedIds): void {
+    Schema::dropIfExists('filterable_formatted_records');
+    Schema::create('filterable_formatted_records', function (Blueprint $table) use ($storage): void {
+        $table->id();
+        $storage === 'integer' ? $table->bigInteger('occurred_at') : $table->string('occurred_at');
+    });
+    $model = new class extends Model
+    {
+        public $timestamps = false;
+
+        protected $table = 'filterable_formatted_records';
+
+        protected $guarded = [];
+
+        protected $casts = ['occurred_at' => 'datetime'];
+    };
+    $model->setDateFormat($format);
+    foreach (['2026-01-01 10:00:00', '2026-01-01 12:00:00', '2026-01-01 14:00:00'] as $instant) {
+        $model->newInstance()->setDateFormat($format)->fill(['occurred_at' => CarbonImmutable::parse($instant, 'UTC')])->save();
+    }
+    $query = $model->newQuery();
+    $query->getModel()->setDateFormat($format);
+    $schema = new FilterSchema([new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [$operator])], [new SortDefinition('id', 'id')]);
+
+    try {
+        expect(app(EloquentFilterApplier::class)->apply($query, $schema, [['alias' => 'occurred', 'operator' => $operator, 'value' => $value]], [['alias' => 'id', 'direction' => SortDirection::Asc]])->pluck('id')->all())
+            ->toBe($expectedIds);
+    } finally {
+        Schema::dropIfExists('filterable_formatted_records');
+    }
+})->with([
+    'unix equality' => ['U', 'integer', FilterOperator::Equals, '2026-01-01T12:00:00Z', [2]],
+    'unix after' => ['U', 'integer', FilterOperator::After, '2026-01-01T12:00:00Z', [3]],
+    'unix range' => ['U', 'integer', FilterOperator::Between, ['2026-01-01T11:00:00Z', '2026-01-01T13:00:00Z'], [2]],
+    'iso equality' => ['Y-m-d\TH:i:sP', 'string', FilterOperator::Equals, '2026-01-01T14:00:00+02:00', [2]],
+    'iso set membership' => ['Y-m-d\TH:i:sP', 'string', FilterOperator::In, ['2026-01-01T10:00:00Z', '2026-01-01T14:00:00Z'], [1, 3]],
+    'iso before' => ['Y-m-d\TH:i:sP', 'string', FilterOperator::Before, '2026-01-01T12:00:00Z', [1]],
+]);
+
+it('resolves PostgreSQL column storage types through the search path the query uses', function (): void {
+    $connection = DB::connection();
+    if ($connection->getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Only PostgreSQL resolves tables through a schema search path.');
+    }
+
+    Schema::dropIfExists('filterable_path_records');
+    Schema::create('filterable_path_records', function (Blueprint $table): void {
+        $table->id();
+        $table->string('occurred_at');
+    });
+    $connection->table('filterable_path_records')->insert([['id' => 1, 'occurred_at' => '2026-01-01 10:00:00'], ['id' => 2, 'occurred_at' => '2026-01-01 12:00:00']]);
+    $connection->statement('CREATE SCHEMA IF NOT EXISTS filterable_empty_tenant');
+    $connection->statement('SET search_path TO filterable_empty_tenant, public');
+    $model = new class extends Model
+    {
+        public $timestamps = false;
+
+        protected $table = 'filterable_path_records';
+    };
+    $schema = new FilterSchema([new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [FilterOperator::Equals])], []);
+
+    try {
+        expect(app(EloquentFilterApplier::class)->apply($model->newQuery(), $schema, [['alias' => 'occurred', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01T12:00:00Z']])->pluck('id')->all())
+            ->toBe([2]);
+    } finally {
+        $connection->statement('SET search_path TO public');
+        $connection->statement('DROP SCHEMA IF EXISTS filterable_empty_tenant CASCADE');
+        Schema::dropIfExists('filterable_path_records');
+    }
+});
+
+it('keeps PostgreSQL column storage types apart for each configured search path', function (): void {
+    $connection = DB::connection();
+    if ($connection->getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Only PostgreSQL resolves tables through a schema search path.');
+    }
+
+    $name = $connection->getName();
+    $original = config("database.connections.{$name}");
+    $connection->statement('CREATE SCHEMA IF NOT EXISTS filterable_text_tenant');
+    $connection->statement('CREATE SCHEMA IF NOT EXISTS filterable_native_tenant');
+    $connection->statement('CREATE TABLE filterable_text_tenant.filterable_path_records (id bigint primary key, occurred_at varchar(255) not null)');
+    $connection->statement('CREATE TABLE filterable_native_tenant.filterable_path_records (id bigint primary key, occurred_at timestamptz not null)');
+    $connection->statement("INSERT INTO filterable_text_tenant.filterable_path_records VALUES (1, '2026-01-01 12:00:00')");
+    $connection->statement("INSERT INTO filterable_native_tenant.filterable_path_records VALUES (1, '2026-01-01 12:00:00+00')");
+    $model = new class extends Model
+    {
+        public $timestamps = false;
+
+        protected $table = 'filterable_path_records';
+    };
+    $schema = new FilterSchema([new FilterDefinition('occurred', 'occurred_at', FilterValueType::DateTime, [FilterOperator::Equals])], []);
+    $filters = [['alias' => 'occurred', 'operator' => FilterOperator::Equals, 'value' => '2026-01-01T12:00:00Z']];
+    $matches = [];
+
+    try {
+        foreach (['filterable_text_tenant', 'filterable_native_tenant'] as $tenant) {
+            config(["database.connections.{$name}" => [...$original, 'search_path' => $tenant, 'timezone' => 'Europe/Sofia']]);
+            DB::purge($name);
+            $matches[$tenant] = app(EloquentFilterApplier::class)->apply($model->newQuery(), $schema, $filters)->pluck('id')->all();
+        }
+    } finally {
+        config(["database.connections.{$name}" => $original]);
+        DB::purge($name);
+        DB::connection($name)->statement('DROP SCHEMA IF EXISTS filterable_text_tenant CASCADE');
+        DB::connection($name)->statement('DROP SCHEMA IF EXISTS filterable_native_tenant CASCADE');
+    }
+
+    expect($matches)->toBe(['filterable_text_tenant' => [1], 'filterable_native_tenant' => [1]]);
 });
