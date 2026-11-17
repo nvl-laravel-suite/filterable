@@ -5,11 +5,19 @@ All notable changes to `nvl/filterable` are documented here.
 
 ## [Unreleased]
 
+## [7.4.0] - 2026-11-17
+
 ### Fixed
 
 - PostgreSQL date-time filter bindings look up the column's storage type by its exact name, so `"Occurred_At"` and `occurred_at` no longer resolve to each other's type, and the cached type is keyed by the connection's table prefix as well as the table and column.
 - Date-time filters on a model with a custom `$dateFormat` (for example `U` integer timestamps or `Y-m-d\TH:i:sP` text) bind values in that format instead of `Y-m-d H:i:s`, so they match the stored values; on PostgreSQL, numeric and other non-temporal columns also receive the model format instead of an offset instant they cannot parse.
 - PostgreSQL column storage types resolve the relation exactly as the query does through the session search path (`to_regclass`), instead of only the first schema of that path, and the cache is keyed by the connection's configured search path, so tenants on different schemas no longer share a stale type.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- consumer-audit fixes across the suite, UTC timestamps, core/forms release ordering
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.3.0] - 2026-11-17
 
